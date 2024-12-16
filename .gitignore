@@ -1,2 +1,4 @@
 /target
 /payload
+*.mp3
+Cargo.lock
