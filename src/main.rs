@@ -22,8 +22,11 @@
 // │ 4    │ apiv13dlp.cnvmp3.me │ /download.php       │ GET         │ N/A (query string parameter) │ mp3 file data   │
 // ╘══════╧═════════════════════╧═════════════════════╧═════════════╧══════════════════════════════╧═════════════════╛
 
+use infer::audio::is_mp3;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-// use urlencoding::encode;
+use std::fs::File;
+use std::io::Write;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PayloadCheckDatabase {
@@ -70,15 +73,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
 
     let pcd = PayloadCheckDatabase {
-        // youtube_id: "W8h05Soz5Nk".into(),
-        youtube_id: "yPvoKz6tyJs".into(),
+        youtube_id: "W8h05Soz5Nk".into(),
+        // youtube_id: "yPvoKz6tyJs".into(),
         quality: 5,
         format_value: 1,
     };
 
     // https://www.youtube.com/watch?v=yPvoKz6tyJs
     // https://www.youtube.com/watch?v=W8h05Soz5Nk
-    let res_raw = client
+    let cd_raw = client
         .post("https://cnvmp3.com/check_database.php")
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
@@ -88,20 +91,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .text()
         .await?;
 
-    let res_parsed: CNVResponse = match json_parse(&res_raw) {
-        Ok(response) => response,
+    let cd_parsed: CNVResponse = match json_parse(&cd_raw) {
+        Ok(p) => p,
         Err(e) => panic!("Error parsing json: {e}"),
     };
 
-    match res_parsed {
-        CNVResponse::Data(_) => {
-            // TODO: retrieve the cdn-local copy
-            println!("retrieve cdn-local copy");
+    match cd_parsed {
+        CNVResponse::Data(cd_data) => {
+            // TODO: check if host-local copy exists
+            let download = client
+                .get(cd_data.data.server_path)
+                .send()
+                .await?
+                .bytes()
+                .await?;
 
-            // sources: [ download.php ]
+            if is_mp3(&download) {
+                let invalid_chars_re = Regex::new(r"[^\w\-_]").unwrap();
+                let title_cleaned = invalid_chars_re.replace_all(&cd_data.data.title, "_");
+
+                let mut outfile = File::create(format!("mp3/{title_cleaned}.mp3"))
+                    .expect("file creation should succeed");
+                match outfile.write_all(&download) {
+                    Ok(_) => println!("{} saved successfully", title_cleaned),
+                    Err(e) => println!("{:?}", e),
+                }
+            } else {
+                let error_parsed = json_parse(std::str::from_utf8(&download).unwrap());
+                let cd_error: CNVResponse = match error_parsed {
+                    Ok(p) => p,
+                    Err(e) => panic!("{e}"),
+                };
+
+                match cd_error {
+                    CNVResponse::Error(e) => println!("{}", e.error),
+                    _ => panic!("unsupported server response"),
+                };
+            }
         }
-        CNVResponse::Error(_) => {
+        CNVResponse::Error(cd_error) => {
             // TODO: retrieve from backend server
+            println!("{}", cd_error.error);
             println!("retrieve from backend server");
             // sources:
             //     - get video data
