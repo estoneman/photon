@@ -2,3 +2,4 @@
 /payload
 *.mp3
 Cargo.lock
+*.old
