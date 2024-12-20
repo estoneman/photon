@@ -1,0 +1,22 @@
+{
+    "check_database": {
+        "youtube_id": "string",
+        "quality": "number"
+    },
+    "get_video_data": {
+        "url": "string"
+    },
+    "download_video": {
+        "url": "string",
+        "quality": "number",
+        "title": "string",
+        "formatValue": "number"
+    },
+    "insert_to_database": {
+        "youtube_id": "string",
+        "server_path": "string",
+        "quality": "number",
+        "title": "string",
+        "formatValue": "number"
+    }
+}
