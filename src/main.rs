@@ -63,6 +63,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env::{args, Args};
 use std::fs::File;
+use std::path::Path;
 use std::io::Write;
 use std::process::exit;
 use url::Url;
@@ -361,8 +362,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match match_response(checkdb_res_value.clone()) {
         ResponseCheckDatabase::Exist(data) => {
             eprintln!("[INFO] found file in cdn-local storage");
-            // TODO
-            //   1. download file
+            // 1. check if already exists locally
+            if Path::new(format!("mp3/{}.mp3", data.data.title).as_str()).exists() {
+                println!("video has already been locally saved as mp3");
+                return Ok(());
+            }
+
             cdn_download(
                 client,
                 data.data.server_path.clone(),
@@ -372,16 +377,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         ResponseCheckDatabase::NoExist(_) => {
             eprintln!("[INFO] unable to find file in cdn-local storage");
-            // TODO
-            //   1. fetch title from cdn-local storage (/get_video_data)
             let title = cdn_fetch(client.clone(), youtube_url.as_str()).await?;
 
-            //   2. download video on server side
             let server_path =
                 srv_download(client.clone(), youtube_url.to_string(), title.clone()).await?;
 
-            //   3. insert into cnv database
-            // not sure why this is failing, may have to urlencode
             cdn_insert(
                 client.clone(),
                 server_path.clone(),
@@ -390,7 +390,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .await?;
 
-            //   4. download file
             cdn_download(client, server_path, title).await?;
         }
         ResponseCheckDatabase::Unknown(unknown) => {
