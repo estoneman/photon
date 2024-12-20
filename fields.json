@@ -1,0 +1,58 @@
+{
+    "check_database": [
+        "payload": {
+            "youtube_id": "string",
+            "quality": "number"
+        },
+        "response (success)": {
+            "success": "boolean",
+            "data": {
+                "id": "number",
+                "youtube_id": "string",
+                "server_path": "utring",
+                "quality": "string",
+                "title": "string"
+            }
+        },
+        "response (error)": {
+            "success": "boolean",
+            "error": "string"
+        }
+    ],
+    "get_video_data": [
+        {
+            "payload": {
+                "url": "string"
+            },
+            "response": {
+                "success": "boolean",
+                "title": "string"
+            }
+        }
+    ],
+    "download_video": [
+        "payload": {
+            "url": "string",
+            "quality": "number",
+            "title": "string",
+            "formatValue": "number"
+        },
+        "response": {
+            "success": "string",
+            "download_link": "string"
+        }
+    ],
+    "insert_to_database": [
+        "payload": {
+            "youtube_id": "string",
+            "server_path": "string",
+            "quality": "number",
+            "title": "string",
+            "formatValue": "number"
+        },
+        "response": {
+            "success": "boolean",
+            "message": "string"
+        }
+    ]
+}
