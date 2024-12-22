@@ -1,6 +1,6 @@
 use infer::audio::is_mp3;
-use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
@@ -10,8 +10,8 @@ use std::io::Write;
 struct PayloadCheckDatabase {
     #[serde(rename = "formatValue")]
     format_value: i64,
-    youtube_id: String,
     quality: i64,
+    youtube_id: String,
 }
 
 #[allow(dead_code)]
@@ -63,11 +63,11 @@ struct ResponseGetVideoData {
 // download_video.php
 #[derive(Debug, Serialize)]
 struct PayloadDownloadVideo {
-    url: String,
-    quality: i64,
-    title: String,
     #[serde(rename = "formatValue")]
     format_value: i64,
+    quality: i64,
+    title: String,
+    url: String,
 }
 
 #[allow(dead_code)]
@@ -80,12 +80,12 @@ struct ResponseDownloadVideo {
 // insert_database.php
 #[derive(Debug, Serialize)]
 struct PayloadInsertDatabase {
-    youtube_id: String,
-    server_path: String,
-    quality: i64,
-    title: String,
     #[serde(rename = "formatValue")]
     format_value: i64,
+    quality: i64,
+    server_path: String,
+    title: String,
+    youtube_id: String,
 }
 
 #[allow(dead_code)]
@@ -106,7 +106,7 @@ pub trait CNVRequester {
         title: String,
     ) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn cdn_fetch(&self, url: &str) -> Result<String, Box<dyn std::error::Error>>;
+    async fn cdn_fetch(&self, url: String) -> Result<String, Box<dyn std::error::Error>>;
 
     async fn cdn_insert(
         &self,
@@ -126,35 +126,40 @@ pub trait CNVRequester {
 }
 
 impl CNVRequester for CNVClient {
-    async fn cdn_download(
+    async fn check_database(
         &self,
-        server_path: String,
-        title: String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let download = self.client.get(server_path).send().await?.bytes().await?;
+        youtube_id: String,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let format_value: i64 = 1;
+        let quality: i64 = 1;
 
-        if is_mp3(&download) {
-            let mut outfile =
-                File::create(format!("mp3/{}.mp3", title)).expect("file creation should succeed");
+        let pcd = PayloadCheckDatabase {
+            format_value,
+            quality,
+            youtube_id,
+        };
 
-            match outfile.write_all(&download) {
-                Ok(_) => println!("{} saved successfully", title),
-                Err(e) => println!("{:?}", e),
-            }
-        } else {
-            println!(
-                "downloaded content is not an mp3 file:\n{}",
-                std::str::from_utf8(&download).unwrap()
-            );
-        }
+        let checkdb_res_text = self
+            .client
+            .post("https://cnvmp3.com/check_database.php")
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&pcd)
+            .send()
+            .await?
+            .text()
+            .await?;
 
-        Ok(())
+        let checkdb_res_value: Value = match serde_json::from_str(&checkdb_res_text) {
+            Ok(data) => data,
+            Err(error) => panic!("{:?}", error),
+        };
+
+        Ok(checkdb_res_value)
     }
 
-    async fn cdn_fetch(&self, url: &str) -> Result<String, Box<dyn std::error::Error>> {
-        let pgvd = PayloadGetVideoData {
-            url: url.to_string(),
-        };
+    async fn cdn_fetch(&self, url: String) -> Result<String, Box<dyn std::error::Error>> {
+        let pgvd = PayloadGetVideoData { url };
 
         let gvd_res_text = self
             .client
@@ -175,46 +180,19 @@ impl CNVRequester for CNVClient {
         Ok(gvd_res_parsed.title)
     }
 
-    async fn cdn_insert(
-        &self,
-        server_path: String,
-        title: String,
-        youtube_id: String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let pid = PayloadInsertDatabase {
-            format_value: 1,
-            quality: 5,
-            youtube_id: youtube_id,
-            server_path: server_path,
-            title: title,
-        };
-
-        let insert = self
-            .client
-            .post("https://cnvmp3.com/insert_to_database.php")
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .json(&pid)
-            .send()
-            .await?
-            .text()
-            .await?;
-
-        println!("{}", insert);
-
-        Ok(())
-    }
-
     async fn srv_download(
         &self,
-        youtube_url: String,
+        url: String,
         title: String,
     ) -> Result<String, Box<dyn std::error::Error>> {
+        let quality: i64 = 5;
+        let format_value: i64 = 1;
+
         let pdv = PayloadDownloadVideo {
-            format_value: 1,
-            url: youtube_url,
-            quality: 5,
-            title: title,
+            format_value,
+            quality,
+            title,
+            url,
         };
 
         let download_video = self
@@ -238,33 +216,67 @@ impl CNVRequester for CNVClient {
         Ok(server_path)
     }
 
-    async fn check_database(
+    async fn cdn_insert(
         &self,
+        server_path: String,
+        title: String,
         youtube_id: String,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
-        let pcd = PayloadCheckDatabase {
-            youtube_id: youtube_id,
-            quality: 5,
-            format_value: 1,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let format_value: i64 = 1;
+        let quality: i64 = 5;
+
+        let pid = PayloadInsertDatabase {
+            format_value,
+            quality,
+            server_path,
+            title,
+            youtube_id,
         };
 
-        let checkdb_res_text = self
+        let ins_res_text = self
             .client
-            .post("https://cnvmp3.com/check_database.php")
+            .post("https://cnvmp3.com/insert_to_database.php")
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .json(&pcd)
+            .json(&pid)
             .send()
             .await?
             .text()
             .await?;
 
-        let checkdb_res_value: Value = match serde_json::from_str(&checkdb_res_text) {
-            Ok(data) => data,
-            Err(error) => panic!("{:?}", error),
+        let ins_res_parsed: ResponseInsertDatabase = match json_parse(&ins_res_text) {
+            Ok(p) => p,
+            Err(e) => panic!("Error parsing json: {e}"),
         };
 
-        Ok(checkdb_res_value)
+        println!("[INFO] {}", ins_res_parsed.message);
+
+        Ok(())
+    }
+
+    async fn cdn_download(
+        &self,
+        server_path: String,
+        youtube_id: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let download = self.client.get(server_path).send().await?.bytes().await?;
+
+        if is_mp3(&download) {
+            let mut outfile = File::create(format!("mp3/{}.mp3", youtube_id))
+                .expect("file creation should succeed");
+
+            match outfile.write_all(&download) {
+                Ok(_) => println!("{} saved successfully", youtube_id),
+                Err(e) => println!("{:?}", e),
+            }
+        } else {
+            println!(
+                "downloaded content is not an mp3 file:\n{}",
+                std::str::from_utf8(&download).unwrap()
+            );
+        }
+
+        Ok(())
     }
 }
 
