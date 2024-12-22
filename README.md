@@ -1,3 +1,3 @@
-# y2mp3
+# photon
 
 ###### Ethan Stoneman 2024
