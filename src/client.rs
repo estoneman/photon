@@ -316,11 +316,10 @@ impl CNVClient {
         server_path: String,
         youtube_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let download = self.client
+        let download = self
+            .client
             .get(server_path)
-            .header("Accept-Encoding", "gzip, deflate, br, zstd")
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            .header("Referer", "https://cnvmp3.com")
             .send()
             .await?
             .bytes()
