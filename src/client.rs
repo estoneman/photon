@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
 
-/// Payload to send to check_database endpoint
+/// Payload to send to `check_database.php` endpoint
 #[derive(Debug, Serialize)]
 struct PayloadCheckDatabase {
     #[serde(rename = "formatValue")]
@@ -51,7 +51,7 @@ pub enum ResponseCheckDatabase {
     Unknown(Value),
 }
 
-/// Payload to send to get_video_data endpoint
+/// Payload to send to `get_video_data.php` endpoint
 #[derive(Debug, Serialize)]
 struct PayloadGetVideoData {
     url: String,
@@ -65,7 +65,7 @@ struct ResponseGetVideoData {
     title: String,
 }
 
-/// Payload to send to download_video endpoint
+/// Payload to send to `download_video.php` endpoint
 #[derive(Debug, Serialize)]
 struct PayloadDownloadVideo {
     #[serde(rename = "formatValue")]
@@ -83,7 +83,7 @@ struct ResponseDownloadVideo {
     success: bool,
 }
 
-/// Payload to send to insert_to_database endpoint
+/// Payload to send to `insert_to_database.php` endpoint
 #[derive(Debug, Serialize)]
 struct PayloadInsertToDatabase {
     #[serde(rename = "formatValue")]
