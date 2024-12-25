@@ -20,14 +20,12 @@
         }
     ],
     "get_video_data": [
-        {
-            "payload": {
-                "url": "string"
-            },
-            "response": {
-                "success": "boolean",
-                "title": "string"
-            }
+        "payload": {
+            "url": "string"
+        },
+        "response": {
+            "success": "boolean",
+            "title": "string"
         }
     ],
     "download_video": [
