@@ -123,7 +123,6 @@ impl CNVClient {
     ///
     /// Returns a `Result` containing a `Value` (from `serde_json`) if the metadata is found, or an
     /// error (`Box<dyn std::error::Error>`) if the operation fails.
-
     pub async fn check_database(
         &self,
         youtube_id: String,
@@ -168,7 +167,6 @@ impl CNVClient {
     /// Returns a `Result` containing a `String` with the YouTube video ID if the operation succeeds,
     /// or an error (`Box<dyn std::error::Error>`) if the request fails or the service does not return
     /// the expected response.
-
     pub async fn cdn_fetch(&self, url: String) -> Result<String, Box<dyn std::error::Error>> {
         let pgvd = PayloadGetVideoData { url };
 
@@ -206,7 +204,6 @@ impl CNVClient {
     /// Returns a `Result` containing a `String` with the location of the MP3 file in the CDN if the
     /// operation is successful, or an error (`Box<dyn std::error::Error>`) if the request fails or
     /// the server does not return the expected response.
-
     pub async fn srv_download(
         &self,
         url: String,
@@ -258,7 +255,6 @@ impl CNVClient {
     ///
     /// Returns a `Result` with an empty tuple (`()`) on success, indicating that the metadata was
     /// successfully inserted into the database. On failure, returns an error (`Box<dyn std::error::Error>`).
-
     pub async fn cdn_insert(
         &self,
         server_path: String,
@@ -310,7 +306,6 @@ impl CNVClient {
     ///
     /// Returns a `Result` with an empty tuple (`()`) on success, indicating the MP3 file was
     /// successfully downloaded and saved locally. On failure, returns an error (`Box<dyn std::error::Error>`).
-
     pub async fn cdn_download(
         &self,
         server_path: String,

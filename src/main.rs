@@ -1,34 +1,4 @@
-// ethan stoneman 20241217
-//
-// frontend to cnvmp3 backend api
-//
-// useful for:
-//   - aspiring dj's
-//   - music heads
-//   - anyone with a soul
-//
-// but actually, this will follow the steps for downloading music from the internet after
-// being converted from a youtube video to an mp3 file
-//
-// ╒══════╤═══════════════════╤═════════════════════════╤═════════════╤══════════════════════════════╤═════════════════╕
-// │ step │ url               │ endpoint                │ http method │ payload                      │ result          │
-// ├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-// │ 1    │ cnvmp3.com        │ /check_database.php     │ POST        │ check_database.json          │ success message │
-// ├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-// │ 2    │ cnvmp3.com        │ /get_video_data.php     │ POST        │ get_video_data.json          │ success message │
-// ├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-// │ 3    │ cnvmp3.com        │ /download_video.php     │ POST        │ download_video.json          │ mp3 url         │
-// ├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-// │ 4    │ cnvmp3.com        │ /insert_to_database.php │ POST        │ insert_to_database.json      │ success message │
-// ├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-// │ 5    │ N/A (CDN-defined) │ /download.php           │ GET         │ N/A (query string parameter) │ mp3 file data   │
-// ╘══════╧═══════════════════╧═════════════════════════╧═════════════╧══════════════════════════════╧═════════════════╛
-//
-// cli args spec:
-//   youtube_url:
-//     type: String
-//     desc: full url to the youtube video to be converted
-//     required: true
+// ethan stoneman 2024
 
 use clap::{command, Parser};
 use std::path::Path;
