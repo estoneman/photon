@@ -9,18 +9,12 @@ useful for:
 but actually, this will follow the steps for downloading music from the internet after
 being converted from a youtube video to an mp3 file
 
-╒══════╤═══════════════════╤═════════════════════════╤═════════════╤══════════════════════════════╤═════════════════╕
-│ step │ url               │ endpoint                │ http method │ payload                      │ result          │
-├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-│ 1    │ cnvmp3.com        │ /check\_database.php     │ POST        │ check\_database.json          │ success message │
-├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-│ 2    │ cnvmp3.com        │ /get\_video\_data.php     │ POST        │ get\_video\_data.json          │ success message │
-├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-│ 3    │ cnvmp3.com        │ /download\_video.php     │ POST        │ download\_video.json          │ mp3 url         │
-├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-│ 4    │ cnvmp3.com        │ /insert\_to\_database.php │ POST        │ insert\_to\_database.json      │ success message │
-├──────┼───────────────────┼─────────────────────────┼─────────────┼──────────────────────────────┼─────────────────┤
-│ 5    │ N/A (CDN-defined) │ /download.php           │ GET         │ N/A (query string parameter) │ mp3 file data   │
-╘══════╧═══════════════════╧═════════════════════════╧═════════════╧══════════════════════════════╧═════════════════╛
+|step|host|endpoint|http method|description|
+|:---|:--:|:------:|:---------:|----------:|
+|1|cnvmp3.com|/check\_database.php|POST|confirm whether song file is not local to cdn|
+|2|cnvmp3.com|/get\_video\_data.php|POST|tells server to get video details from youtube|
+|3|cnvmp3.com|/download\_video.php|POST|tells server to download song file into cdn|
+|4|cnvmp3.com|/insert\_to\_database.php|POST|insert metadata about song in server database for faster retrieval on future requests to same song|
+|5|N/A (CDN-defined)|/download.php|GET|download the song file locally|
 
 ###### Ethan Stoneman 2024
