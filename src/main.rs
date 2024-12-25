@@ -30,7 +30,7 @@
 //     desc: full url to the youtube video to be converted
 //     required: true
 
-use std::env::{args, Args};
+use clap::{command, Parser};
 use std::path::Path;
 use std::process::exit;
 use url::Url;
@@ -47,32 +47,38 @@ photon https://www.youtube.com/watch?v=shus67s72"
     )
 }
 
+/// Command-line argument specification
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// A valid YouTube URL
+    #[arg(long, value_name = "URL")]
+    youtube_url: String,
+    /// Where to store the returned MP3 file
+    #[arg(long, value_parser = ["local", "ssh"], value_name = "TYPE", default_value = "local")]
+    dest_type: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut argv: Args = args();
+    let args = Args::parse();
 
-    let youtube_url: Url = match argv.nth(1) {
-        Some(arg) => match Url::parse(&arg) {
-            Ok(u) => u,
-            Err(e) => {
-                eprintln!("[ERROR] unable to parse argument as a valid url: {:?}", e);
-                usage();
-                exit(1);
-            }
-        },
-        None => {
-            eprintln!("[ERROR] unable to get the url, was it supplied?");
+    let youtube_url: Url = match Url::parse(&args.youtube_url) {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("error: Unable to parse argument as a valid url: {:?}", e);
             usage();
             exit(1);
         }
     };
 
-    println!("[INFO] Using YouTube URL: {}", youtube_url);
+    assert_eq!(youtube_url.host_str(), Some("www.youtube.com"));
+    println!("info: Using YouTube URL: {}", youtube_url);
 
     let youtube_id = match youtube_url.query_pairs().next() {
         Some(v) => v.1,
         None => {
-            eprintln!("[ERROR] youtube url is not valid (doesn't include `v` query string key)");
+            eprintln!("error: youtube url is not valid (doesn't include `v` query string key)");
             usage();
             exit(1);
         }
@@ -87,10 +93,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match match_response(checkdb_res) {
             ResponseCheckDatabase::Exist(data) => {
+                eprintln!("info: file exists in cdn");
                 c.cdn_download(data.data.server_path.clone(), youtube_id.to_string())
                     .await?;
             }
             ResponseCheckDatabase::NoExist(_) => {
+                eprintln!("info: file does not exist in cdn");
                 let title = c.cdn_fetch(youtube_url.to_string()).await?;
 
                 let server_path = c
@@ -103,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 c.cdn_download(server_path, youtube_id.to_string()).await?;
             }
             ResponseCheckDatabase::Unknown(unknown) => {
-                eprintln!("[ERROR] unknown response type: {:?}", unknown);
+                eprintln!("error: unknown response type: {:?}", unknown);
                 exit(1);
             }
         };
