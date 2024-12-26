@@ -1,4 +1,5 @@
 # 20241224
+* query analysis data files for beat grid information
+
 ## N2H Functionality
-* query analysis data files
 * mount usb stick
