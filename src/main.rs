@@ -130,7 +130,7 @@ fn bpm_in_range(s: &str) -> Result<u8, String> {
         )
     })?;
     if BPM_RANGE.contains(&bpm) {
-        Ok(bpm as u8)
+        Ok(bpm)
     } else {
         Err(format!(
             "bpm not in range {}-{}",
@@ -146,7 +146,6 @@ fn analysis(bpm: Option<u8>) {
         None => eprintln!("info: not filtering tracks with a certain bpm value"),
     }
     eprintln!("this code will not run, it is not finished");
-    assert!(false);
 }
 
 #[tokio::main]
@@ -163,7 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             download(youtube_url.clone()).await?;
         }
         Commands::Analysis { bpm } => {
-            analysis(bpm.clone());
+            analysis(*bpm);
         }
     }
 
