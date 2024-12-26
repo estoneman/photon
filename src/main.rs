@@ -1,6 +1,6 @@
 // ethan stoneman 2024
 
-use clap::{command, Parser};
+use clap::{command, Parser, Subcommand};
 use std::path::Path;
 use std::process::exit;
 use url::Url;
@@ -8,55 +8,50 @@ use url::Url;
 mod client;
 use client::*;
 
-fn usage() {
-    eprintln!(
-        "usage:\n  \
-photon <youtube-url>\n\
-example:\n  \
-photon https://www.youtube.com/watch?v=shus67s72"
-    )
-}
-
-/// Command-line argument specification
-#[derive(Parser, Debug)]
+/// Top-level command-line argument specification
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Args {
-    /// A valid YouTube URL
-    #[arg(long, value_name = "URL")]
-    youtube_url: String,
-    /// Where to store the returned MP3 file
-    #[arg(long, value_parser = ["local", "ssh"], value_name = "TYPE", default_value = "local")]
-    dest_type: String,
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+/// Currently supported subcommands
+#[derive(Subcommand)]
+enum Commands {
+    /// Converts YouTube videos to local mp3 files
+    Convert {
+        /// A valid YouTube URL
+        #[arg(long, value_name = "URL")]
+        youtube_url: Option<Url>,
+        /// Where to store the returned MP3 file
+        #[arg(long, value_parser = ["local", "ssh"], value_name = "TYPE", default_value = "local")]
+        dest_type: Option<String>,
+    },
+    /// Shows rekordbox track analysis information
+    Analysis {
+        /// Positive value for Beats Per Minute (BPM)
+        #[arg(long, value_name = "BPM")]
+        bpm: Option<u16>,
+    },
+}
 
-    let youtube_url: Url = match Url::parse(&args.youtube_url) {
-        Ok(u) => u,
-        Err(e) => {
-            eprintln!("error: Unable to parse argument as a valid url: {:?}", e);
-            usage();
-            exit(1);
-        }
-    };
-
+async fn convert(youtube_url: Url) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(youtube_url.host_str(), Some("www.youtube.com"));
-    println!("info: Using YouTube URL: {}", youtube_url);
 
-    let youtube_id = match youtube_url.query_pairs().next() {
-        Some(v) => v.1,
+    let youtube_id: String = match youtube_url.query_pairs().next() {
+        Some(v) => v.1.to_string(),
         None => {
-            eprintln!("error: youtube url is not valid (doesn't include `v` query string key)");
-            usage();
+            eprintln!(
+                "error: youtube url is not valid (doesn't include youtube id in query string)"
+            );
             exit(1);
         }
     };
 
     if Path::new(format!("mp3/{}.mp3", youtube_id.clone()).as_str()).exists() {
         println!("the requested video has already been saved locally as mp3");
-        return Ok(());
     }
 
     let c = CNVClient {
@@ -89,6 +84,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             exit(1);
         }
     };
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        // TODO: use the dest type when downloading
+        #[allow(unused_variables)]
+        Commands::Convert {
+            youtube_url,
+            dest_type,
+        } => {
+            convert(youtube_url.as_ref().unwrap().clone()).await?;
+        }
+        Commands::Analysis { bpm } => {
+            println!("{}", bpm.unwrap());
+        }
+    }
 
     Ok(())
 }
