@@ -1,6 +1,7 @@
 // ethan stoneman 2024
 
 use clap::{command, Parser, Subcommand};
+use std::ops::RangeInclusive;
 use std::path::Path;
 use std::process::exit;
 use url::Url;
@@ -21,10 +22,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Converts YouTube videos to local mp3 files
-    Convert {
+    Download {
         /// A valid YouTube URL
         #[arg(long, value_name = "URL")]
-        youtube_url: Option<Url>,
+        youtube_url: Url,
         /// Where to store the returned MP3 file
         #[arg(long, value_parser = ["local", "ssh"], value_name = "TYPE", default_value = "local")]
         dest_type: Option<String>,
@@ -32,12 +33,42 @@ enum Commands {
     /// Shows rekordbox track analysis information
     Analysis {
         /// Positive value for Beats Per Minute (BPM)
-        #[arg(long, value_name = "BPM")]
-        bpm: Option<u16>,
+        #[arg(long, value_name = "BPM", value_parser = bpm_in_range)]
+        bpm: Option<u8>,
     },
 }
 
-async fn convert(youtube_url: Url) -> Result<(), Box<dyn std::error::Error>> {
+/// Converts a YouTube video to an MP3 file and downloads it.
+///
+/// # Arguments
+///
+/// * `youtube_url` - The URL of the YouTube video to convert.
+///
+/// # Returns
+///
+/// * `Ok(())` - If the MP3 file is downloaded successfully.
+/// * `Err` - If an error occurs during conversion or download.
+///
+/// # Example
+///
+/// ```rust
+/// use url::Url;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let youtube_url = Url::parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
+///     if let Err(e) = convert(youtube_url).await {
+///         eprintln!("Error: {}", e);
+///     } else {
+///         println!("Download successful!");
+///     }
+/// }
+/// ```
+///
+/// # Notes
+///
+/// This function uses `cnvmp3.com` to perform the conversion.
+async fn download(youtube_url: Url) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(youtube_url.host_str(), Some("www.youtube.com"));
 
     let youtube_id: String = match youtube_url.query_pairs().next() {
@@ -88,6 +119,36 @@ async fn convert(youtube_url: Url) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+const BPM_RANGE: RangeInclusive<u8> = 120..=140;
+
+fn bpm_in_range(s: &str) -> Result<u8, String> {
+    let bpm: u8 = s.parse().map_err(|_| {
+        format!(
+            "`{s}` isn't a sane bpm value\ntry something in this range {}-{}",
+            BPM_RANGE.start(),
+            BPM_RANGE.end()
+        )
+    })?;
+    if BPM_RANGE.contains(&bpm) {
+        Ok(bpm as u8)
+    } else {
+        Err(format!(
+            "bpm not in range {}-{}",
+            BPM_RANGE.start(),
+            BPM_RANGE.end()
+        ))
+    }
+}
+
+fn analysis(bpm: Option<u8>) {
+    match bpm {
+        Some(bpm) => eprintln!("info: filtering tracks with bpm at {}", bpm),
+        None => eprintln!("info: not filtering tracks with a certain bpm value"),
+    }
+    eprintln!("this code will not run, it is not finished");
+    assert!(false);
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -95,14 +156,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &cli.command {
         // TODO: use the dest type when downloading
         #[allow(unused_variables)]
-        Commands::Convert {
+        Commands::Download {
             youtube_url,
             dest_type,
         } => {
-            convert(youtube_url.as_ref().unwrap().clone()).await?;
+            download(youtube_url.clone()).await?;
         }
         Commands::Analysis { bpm } => {
-            println!("{}", bpm.unwrap());
+            analysis(bpm.clone());
         }
     }
 
