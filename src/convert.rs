@@ -20,26 +20,26 @@ struct PayloadCheckDatabase {
 /// When a video is found in its database, cnvmp3 will return its video data
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-pub struct ResponseCheckDatabaseData {
+struct ResponseCheckDatabaseData {
     id: i64,
     quality: String,
-    pub server_path: String,
-    pub title: String,
+    server_path: String,
+    title: String,
     youtube_id: String,
 }
 
 /// When a video is found in the cnvmp3 database
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-pub struct ResponseCheckDatabaseExist {
-    pub data: ResponseCheckDatabaseData,
+struct ResponseCheckDatabaseExist {
+    data: ResponseCheckDatabaseData,
     success: bool,
 }
 
 /// When a video is not found in the cnvmp3 database
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-pub struct ResponseCheckDatabaseNoExist {
+struct ResponseCheckDatabaseNoExist {
     error: String,
     success: bool,
 }
@@ -48,7 +48,7 @@ pub struct ResponseCheckDatabaseNoExist {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum ResponseCheckDatabase {
+enum ResponseCheckDatabase {
     Exist(ResponseCheckDatabaseExist),
     NoExist(ResponseCheckDatabaseNoExist),
     Unknown(Value),
@@ -106,8 +106,8 @@ struct ResponseInsertToDatabase {
 }
 
 /// Custom wrapper for `reqwest::Client`
-pub struct CNVClient {
-    pub client: reqwest::Client,
+struct CNVClient {
+    client: reqwest::Client,
 }
 
 /// Implementation of the responsibilities of my custom client
@@ -126,7 +126,7 @@ impl CNVClient {
     ///
     /// Returns a `Result` containing a `Value` (from `serde_json`) if the metadata is found, or an
     /// error (`Box<dyn std::error::Error>`) if the operation fails.
-    pub async fn check_database(
+    async fn check_database(
         &self,
         youtube_id: String,
     ) -> Result<Value, Box<dyn std::error::Error>> {
@@ -170,7 +170,7 @@ impl CNVClient {
     /// Returns a `Result` containing a `String` with the YouTube video ID if the operation succeeds,
     /// or an error (`Box<dyn std::error::Error>`) if the request fails or the service does not return
     /// the expected response.
-    pub async fn cdn_fetch(&self, url: String) -> Result<String, Box<dyn std::error::Error>> {
+    async fn cdn_fetch(&self, url: String) -> Result<String, Box<dyn std::error::Error>> {
         let pgvd = PayloadGetVideoData { url };
 
         let gvd_res_text = self
@@ -207,7 +207,7 @@ impl CNVClient {
     /// Returns a `Result` containing a `String` with the location of the MP3 file in the CDN if the
     /// operation is successful, or an error (`Box<dyn std::error::Error>`) if the request fails or
     /// the server does not return the expected response.
-    pub async fn srv_download(
+    async fn srv_download(
         &self,
         url: String,
         title: String,
@@ -258,7 +258,7 @@ impl CNVClient {
     ///
     /// Returns a `Result` with an empty tuple (`()`) on success, indicating that the metadata was
     /// successfully inserted into the database. On failure, returns an error (`Box<dyn std::error::Error>`).
-    pub async fn cdn_insert(
+    async fn cdn_insert(
         &self,
         server_path: String,
         title: String,
@@ -309,7 +309,7 @@ impl CNVClient {
     ///
     /// Returns a `Result` with an empty tuple (`()`) on success, indicating the MP3 file was
     /// successfully downloaded and saved locally. On failure, returns an error (`Box<dyn std::error::Error>`).
-    pub async fn cdn_download(
+    async fn cdn_download(
         &self,
         server_path: String,
         youtube_id: String,
@@ -351,7 +351,7 @@ impl CNVClient {
 ///
 /// Returns a `ResponseCheckDatabase` enum indicating whether the response contains valid data,
 /// an error message, or is unrecognized.
-pub fn match_response(value: Value) -> ResponseCheckDatabase {
+fn match_response(value: Value) -> ResponseCheckDatabase {
     if let Ok(data) = serde_json::from_value::<ResponseCheckDatabaseExist>(value.clone()) {
         let some_data: ResponseCheckDatabaseExist = data;
         return ResponseCheckDatabase::Exist(some_data);
@@ -379,7 +379,7 @@ pub fn match_response(value: Value) -> ResponseCheckDatabase {
 /// # Type Parameters
 ///
 /// * `T` - The target Rust type, which must implement `DeserializeOwned`.
-pub fn json_parse<T>(raw: &str) -> Result<T, String>
+fn json_parse<T>(raw: &str) -> Result<T, String>
 where
     T: DeserializeOwned,
 {

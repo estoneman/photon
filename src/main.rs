@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 use url::Url;
 
 mod convert;
-use convert::*;
+use convert::download;
 
 /// Top-level command-line argument specification
 #[derive(Parser)]
