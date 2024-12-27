@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
+use std::path::Path;
+use std::process::exit;
+use url::Url;
 
 /// Payload to send to `check_database.php` endpoint
 #[derive(Debug, Serialize)]
@@ -325,7 +328,7 @@ impl CNVClient {
                 .expect("file creation should succeed");
 
             match outfile.write_all(&download) {
-                Ok(_) => println!("{} saved successfully", youtube_id),
+                Ok(_) => println!("info: {} saved successfully", youtube_id),
                 Err(e) => println!("{:?}", e),
             }
         } else {
@@ -381,4 +384,87 @@ where
     T: DeserializeOwned,
 {
     serde_json::from_str::<T>(raw).map_err(|e| e.to_string())
+}
+
+/// Converts a YouTube video to an MP3 file and downloads it.
+///
+/// # Arguments
+///
+/// * `youtube_url` - The URL of the YouTube video to convert.
+///
+/// # Returns
+///
+/// * `Ok(())` - If the MP3 file is downloaded successfully.
+/// * `Err` - If an error occurs during conversion or download.
+///
+/// # Example
+///
+/// ```rust
+/// use url::Url;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let youtube_url = Url::parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
+///     if let Err(e) = convert(youtube_url).await {
+///         eprintln!("Error: {}", e);
+///     } else {
+///         println!("Download successful!");
+///     }
+/// }
+/// ```
+///
+/// # Notes
+///
+/// This function uses `cnvmp3.com` to perform the conversion.
+#[tokio::main]
+pub async fn download(youtube_url: Url) -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(youtube_url.host_str(), Some("www.youtube.com"));
+
+    let youtube_id: String = match youtube_url.query_pairs().next() {
+        Some(v) => v.1.to_string(),
+        None => {
+            eprintln!(
+                "error: youtube url is not valid (doesn't include youtube id in query string)"
+            );
+            exit(1);
+        }
+    };
+
+    if Path::new(format!("mp3/{}.mp3", youtube_id.clone()).as_str()).exists() {
+        println!("info: the requested video has already been saved locally as mp3");
+        return Ok(());
+    }
+
+    let c = CNVClient {
+        client: reqwest::Client::new(),
+    };
+
+    let checkdb_res = c.check_database(youtube_id.to_string()).await?;
+
+    match match_response(checkdb_res) {
+        ResponseCheckDatabase::Exist(data) => {
+            eprintln!("info: file exists in cdn");
+            c.cdn_download(data.data.server_path.clone(), youtube_id.to_string())
+                .await?;
+        }
+        ResponseCheckDatabase::NoExist(_) => {
+            eprintln!("info: file does not exist in cdn");
+            let title = c.cdn_fetch(youtube_url.to_string()).await?;
+
+            let server_path = c
+                .srv_download(youtube_url.to_string(), title.clone())
+                .await?;
+
+            c.cdn_insert(server_path.clone(), title.clone(), youtube_id.to_string())
+                .await?;
+
+            c.cdn_download(server_path, youtube_id.to_string()).await?;
+        }
+        ResponseCheckDatabase::Unknown(unknown) => {
+            eprintln!("error: unknown response type: {:?}", unknown);
+            exit(1);
+        }
+    };
+
+    Ok(())
 }
