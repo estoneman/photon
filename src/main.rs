@@ -33,14 +33,12 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        // TODO: use the dest type when downloading
-        #[allow(unused_variables)]
         Commands::Download {
             youtube_url,
             dest_type,
-        } => match download(youtube_url.clone()) {
+        } => match download(youtube_url.clone(), dest_type.as_ref().unwrap().to_string()) {
             Ok(_) => eprintln!("info: download complete"),
-            Err(e) => eprintln!("{:?}", e),
+            Err(e) => eprintln!("error: {}", e),
         },
     }
 }
