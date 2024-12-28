@@ -1,5 +1,4 @@
 # 20241224
-* query analysis data files for beat grid information
-
-## N2H Functionality
-* mount usb stick
+* enumerate magic numbers to give meaning to what they symbolize (format value,
+  quality, etc.)
+* fix docstrings
