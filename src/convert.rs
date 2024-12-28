@@ -20,10 +20,14 @@ struct PayloadCheckDatabase {
 /// When a video is found in its database, cnvmp3 will return this video data
 #[derive(Debug, Deserialize)]
 struct CheckDatabaseVideoData {
+    #[serde(rename = "id")]
     _id: i64,
+    #[serde(rename = "quality")]
     _quality: String,
     server_path: String,
+    #[serde(rename = "title")]
     _title: String,
+    #[serde(rename = "youtube_id")]
     _youtube_id: String,
 }
 
@@ -31,6 +35,7 @@ struct CheckDatabaseVideoData {
 #[derive(Debug, Deserialize)]
 struct CheckDatabaseExist {
     data: CheckDatabaseVideoData,
+    #[serde(rename = "success")]
     _success: bool,
 }
 
@@ -39,6 +44,7 @@ struct CheckDatabaseExist {
 #[derive(Debug, Deserialize)]
 struct CheckDatabaseNoExist {
     error: String,
+    #[serde(rename = "success")]
     _success: bool,
 }
 
@@ -52,6 +58,7 @@ struct PayloadGetVideoData {
 /// When successful, cnvmp3 will return the title of the video
 #[derive(Debug, Deserialize)]
 struct GetVideoData {
+    #[serde(rename = "success")]
     _success: bool,
     title: String,
 }
@@ -59,6 +66,7 @@ struct GetVideoData {
 /// When a failure occurs, cnvmp3 will return the error encountered
 #[derive(Debug, Deserialize)]
 struct GetVideoDataError {
+    #[serde(rename = "success")]
     _success: bool,
     error: String,
 }
@@ -79,6 +87,7 @@ struct PayloadDownloadVideo {
 #[derive(Debug, Deserialize)]
 struct DownloadVideoData {
     download_link: String,
+    #[serde(rename = "success")]
     _success: bool,
 }
 
@@ -108,6 +117,7 @@ struct PayloadInsertToDatabase {
 /// Upon success, cnvmp3 will return the success messsage
 #[derive(Debug, Deserialize)]
 struct InsertToDatabaseData {
+    #[serde(rename = "success")]
     _success: bool,
     message: String,
 }
@@ -115,6 +125,7 @@ struct InsertToDatabaseData {
 /// Upon failure, the error encountered will be returned
 #[derive(Debug, Deserialize)]
 struct InsertToDatabaseError {
+    #[serde(rename = "success")]
     _success: bool,
     error: String,
 }
@@ -514,4 +525,18 @@ pub async fn download(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_download_ok() {
+        let youtube_url = Url::parse("https://www.youtube.com/watch?v=yPvoKz6tyJs").expect("Url::parse should work");
+        let dest_type = String::from("local");
+
+        let result = download(youtube_url.clone(), dest_type.clone());
+        assert!(result.is_ok());
+    }
 }
