@@ -533,7 +533,8 @@ mod tests {
 
     #[test]
     fn test_download_ok() {
-        let youtube_url = Url::parse("https://www.youtube.com/watch?v=yPvoKz6tyJs").expect("Url::parse should work");
+        let youtube_url = Url::parse("https://www.youtube.com/watch?v=yPvoKz6tyJs")
+            .expect("Url::parse should work");
         let dest_type = String::from("local");
 
         let result = download(youtube_url.clone(), dest_type.clone());
