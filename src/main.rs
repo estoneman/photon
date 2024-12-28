@@ -1,7 +1,6 @@
 // ethan stoneman 2024
 
 use clap::{command, Parser, Subcommand};
-use std::ops::RangeInclusive;
 use url::Url;
 
 mod convert;
@@ -28,41 +27,6 @@ enum Commands {
         #[arg(long, value_parser = ["local", "ssh"], value_name = "TYPE", default_value = "local")]
         dest_type: Option<String>,
     },
-    /// Shows rekordbox track analysis information
-    Analysis {
-        /// Positive value for Beats Per Minute (BPM)
-        #[arg(long, value_name = "BPM", value_parser = bpm_in_range)]
-        bpm: Option<u8>,
-    },
-}
-
-const BPM_RANGE: RangeInclusive<u8> = 120..=140;
-
-fn bpm_in_range(s: &str) -> Result<u8, String> {
-    let bpm: u8 = s.parse().map_err(|_| {
-        format!(
-            "`{s}` isn't a sane bpm value\ntry something in this range {}-{}",
-            BPM_RANGE.start(),
-            BPM_RANGE.end()
-        )
-    })?;
-    if BPM_RANGE.contains(&bpm) {
-        Ok(bpm)
-    } else {
-        Err(format!(
-            "bpm not in range {}-{}",
-            BPM_RANGE.start(),
-            BPM_RANGE.end()
-        ))
-    }
-}
-
-fn analysis(bpm: Option<u8>) {
-    match bpm {
-        Some(bpm) => eprintln!("info: filtering tracks with bpm at {}", bpm),
-        None => eprintln!("info: not filtering tracks with a certain bpm value"),
-    }
-    eprintln!("this code will not run, it is not finished");
 }
 
 fn main() {
@@ -78,8 +42,5 @@ fn main() {
             Ok(_) => eprintln!("info: download complete"),
             Err(e) => eprintln!("{:?}", e),
         },
-        Commands::Analysis { bpm } => {
-            analysis(*bpm);
-        }
     }
 }

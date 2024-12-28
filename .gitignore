@@ -3,3 +3,4 @@
 *.mp3
 Cargo.lock
 *.old
+.*venv
