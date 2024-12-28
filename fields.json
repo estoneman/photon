@@ -23,9 +23,13 @@
         "payload": {
             "url": "string"
         },
-        "response": {
+        "response (success)": {
             "success": "boolean",
             "title": "string"
+        },
+        "response (error)": {
+            "success": "boolean",
+            "error": "string"
         }
     ],
     "download_video": [
@@ -35,9 +39,14 @@
             "title": "string",
             "formatValue": "number"
         },
-        "response": {
+        "response (success)": {
             "success": "string",
             "download_link": "string"
+        },
+        "response (error)": {
+            "success": "string",
+            "errorType": "number",
+            "error": "string"
         }
     ],
     "insert_to_database": [
@@ -48,9 +57,13 @@
             "title": "string",
             "formatValue": "number"
         },
-        "response": {
+        "response (success)": {
             "success": "boolean",
             "message": "string"
+        },
+        "response (error)": {
+            "success": "boolean",
+            "error": "string"
         }
     ]
 }
