@@ -1,13 +1,17 @@
 use infer::audio::is_mp3;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::process::exit;
 use url::Url;
 
 use crate::bitrate::BitRate;
+
+const PATTERN_EMBED: &str = r"^.+\/embed";
+const PATTERN_SHORT: &str = r"^.+\/shorts";
+const PATTERN_REGULAR: &str = r"^.+\/watch";
 
 /// Enumerated list of supported formats to download youtube videos as
 /// * MP3 for audio
@@ -373,6 +377,144 @@ impl CNVClient {
     }
 }
 
+#[derive(Debug)]
+struct PhotonError {
+    kind: PhotonErrorKind,
+    msg: String,
+}
+
+#[derive(Debug)]
+enum PhotonErrorKind {
+    InvalidURL,
+    InvalidURLType,
+}
+
+impl std::fmt::Display for PhotonErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::InvalidURL => writeln!(f, "InvalidURL"),
+            Self::InvalidURLType => writeln!(f, "InvalidURLType"),
+        }
+    }
+}
+
+impl std::fmt::Display for PhotonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Kind: {}, Message: {}", self.kind, self.msg)
+    }
+}
+
+impl std::error::Error for PhotonError {}
+
+#[derive(Clone, Debug)]
+enum YouTubeURLKind {
+    Short,
+    Embed,
+    Regular,
+    Invalid,
+}
+
+impl std::fmt::Display for YouTubeURLKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            YouTubeURLKind::Short => writeln!(f, "Short"),
+            YouTubeURLKind::Embed => writeln!(f, "Embed"),
+            YouTubeURLKind::Regular => writeln!(f, "Regular"),
+            YouTubeURLKind::Invalid => writeln!(f, "Invalid"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct YouTubeURL {
+    url: Url,
+    r#type: YouTubeURLKind,
+    id: String,
+}
+
+impl YouTubeURL {
+    fn new(url: Url) -> Result<Self, PhotonError> {
+        let r#type = YouTubeURL::get_type(url.clone())?;
+        let id = YouTubeURL::get_id(url.clone(), r#type.clone())?;
+
+        let youtube_url = YouTubeURL { url, r#type, id };
+
+        if let Err(e) = youtube_url.validate() {
+            return Err(PhotonError {
+                kind: PhotonErrorKind::InvalidURL,
+                msg: format!("error: {e:?}"),
+            });
+        };
+
+        Ok(youtube_url)
+    }
+
+    fn get_type(url: Url) -> Result<YouTubeURLKind, PhotonError> {
+        let embed_pattern = Regex::new(PATTERN_EMBED).unwrap();
+        let short_pattern = Regex::new(PATTERN_SHORT).unwrap();
+        let regular_pattern = Regex::new(PATTERN_REGULAR).unwrap();
+
+        let url_str = url.as_str();
+
+        let r#type = if !regular_pattern.is_match(url_str) {
+            YouTubeURLKind::Regular
+        } else if !short_pattern.is_match(url_str) {
+            YouTubeURLKind::Short
+        } else if !embed_pattern.is_match(url_str) {
+            YouTubeURLKind::Embed
+        } else {
+            YouTubeURLKind::Invalid
+        };
+
+        Ok(r#type)
+    }
+
+    fn validate(&self) -> Result<(), PhotonError> {
+        let pattern = Regex::new(
+            r"(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|embed|watch|shorts)\/|.*[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[&?]|$)"
+        ).unwrap();
+
+        if !pattern.is_match(self.url.as_str()) {
+            return Err(PhotonError {
+                kind: PhotonErrorKind::InvalidURL,
+                msg: format!("bad url: {}", self.url.as_str()),
+            });
+        }
+
+        if let YouTubeURLKind::Invalid = self.r#type {
+            return Err(PhotonError {
+                kind: PhotonErrorKind::InvalidURLType,
+                msg: format!("bad type: {}", self.r#type),
+            });
+        };
+
+        Ok(())
+    }
+
+    fn get_id(url: Url, r#type: YouTubeURLKind) -> Result<String, PhotonError> {
+        let mut youtube_id = String::from("");
+
+        match r#type {
+            YouTubeURLKind::Invalid => {
+                return Err(PhotonError {
+                    kind: PhotonErrorKind::InvalidURLType,
+                    msg: format!("bad type: {}", r#type),
+                });
+            }
+            _ => {
+                let id_pattern =
+                    Regex::new(r"(?:(?:shorts|embed)\/(\S+)\/?)|(?:watch\?v=(\S+))").unwrap();
+
+                for (_, [id]) in id_pattern.captures_iter(url.as_str()).map(|c| c.extract()) {
+                    youtube_id = id.to_string();
+                }
+            }
+        }
+
+        Ok(youtube_id)
+    }
+}
+
 /// Converts a YouTube video to an MP3 file and downloads it.
 ///
 /// # Arguments
@@ -410,24 +552,15 @@ impl CNVClient {
 /// downloading the MP3 file.
 #[tokio::main]
 pub async fn download(
-    youtube_url: Url,
+    url: Url,
     dest_type: String,
     quality: BitRate,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    assert_eq!(youtube_url.host_str(), Some("www.youtube.com"));
     eprintln!("info: using bitrate = {quality:?}");
 
-    let youtube_id: String = match youtube_url.query_pairs().next() {
-        Some(v) => v.1.to_string(),
-        None => {
-            eprintln!(
-                "error: youtube url is not valid (doesn't include youtube id in query string)"
-            );
-            exit(1);
-        }
-    };
+    let youtube_url = YouTubeURL::new(url).unwrap();
 
-    if Path::new(format!("mp3/{}.mp3", youtube_id.clone()).as_str()).exists() {
+    if Path::new(format!("mp3/{}.mp3", youtube_url.id).as_str()).exists() {
         println!("info: the requested video has already been saved locally as mp3");
         return Ok(());
     }
@@ -436,7 +569,7 @@ pub async fn download(
 
     let c = CNVClient { client, dest_type };
 
-    let checkdb_res = c.check_database(youtube_id.to_string(), quality).await?;
+    let checkdb_res = c.check_database(youtube_url.id.clone(), quality).await?;
 
     let success = match checkdb_res.get("success").and_then(|v| v.as_bool()) {
         Some(s) => s,
@@ -453,7 +586,8 @@ pub async fn download(
             let checkdb: CheckDatabaseExist =
                 serde_json::from_value::<CheckDatabaseExist>(checkdb_res)
                     .expect("Parsing as CheckDatabaseExist should work");
-            c.cdn_download(checkdb.data.server_path, youtube_id).await?;
+            c.cdn_download(checkdb.data.server_path, youtube_url.id)
+                .await?;
         }
         // response does not contain server_path, go get it
         false => {
@@ -462,7 +596,7 @@ pub async fn download(
                     .expect("Parsing as CheckDatabaseNoExist should work");
             eprintln!("info: {}", error.error);
 
-            let getvd_res = c.cdn_fetch(youtube_url.clone()).await?;
+            let getvd_res = c.cdn_fetch(youtube_url.url.clone()).await?;
 
             let success = match getvd_res.get("success").and_then(|v| v.as_bool()) {
                 Some(s) => s,
@@ -487,7 +621,7 @@ pub async fn download(
             let title = getvd.title;
 
             let dv_res = c
-                .srv_download(youtube_url.clone(), title.clone(), quality)
+                .srv_download(youtube_url.url, title.clone(), quality)
                 .await?;
 
             let success = match dv_res.get("success").and_then(|v| v.as_bool()) {
@@ -513,7 +647,12 @@ pub async fn download(
             let download_link = dv.download_link;
 
             let dl_res = c
-                .cdn_insert(download_link.clone(), title, youtube_id.clone(), quality)
+                .cdn_insert(
+                    download_link.clone(),
+                    title,
+                    youtube_url.id.clone(),
+                    quality,
+                )
                 .await?;
 
             let success =
@@ -537,7 +676,7 @@ pub async fn download(
 
             eprintln!("info: {}", dl.message);
 
-            if let Err(e) = c.cdn_download(download_link, youtube_id.to_string()).await {
+            if let Err(e) = c.cdn_download(download_link, youtube_url.id).await {
                 return Err(format!("error: {}", e).into());
             };
         }
@@ -549,6 +688,20 @@ pub async fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_id() {
+        let test_cases = vec![
+            ("https://www.youtube.com/watch?v=yPvoKz6tyJs", "yPvoKz6tyJs"),
+            ("https://www.youtube.com/embed/3rLN_-VNcfs", "3rLN_-VNcfs"),
+            ("https://www.youtube.com/shorts/3rLN_-VNcfs", "3rLN_-VNcfs"),
+        ];
+
+        for (url, exp) in test_cases {
+            let youtube_url = YouTubeURL::new(Url::parse(url).unwrap()).expect("This should work");
+            assert_eq!(youtube_url.id, exp);
+        }
+    }
 
     #[test]
     fn test_download_ok() {
