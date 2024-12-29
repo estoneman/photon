@@ -1,4 +1,5 @@
 # 20241224
-* enumerate magic numbers to give meaning to what they symbolize (format value,
-  quality, etc.)
-* fix docstrings
+* write a custom URL validator (look for valid hostname, `v` query string key,
+  etc.)
+* enumerate errors encountered when downloading mp3 file (so you can return
+  `Err`)

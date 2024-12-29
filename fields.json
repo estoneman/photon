@@ -9,7 +9,7 @@
             "data": {
                 "id": "number",
                 "youtube_id": "string",
-                "server_path": "utring",
+                "server_path": "string",
                 "quality": "string",
                 "title": "string"
             }
