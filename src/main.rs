@@ -39,7 +39,7 @@ fn bitrate_parser(s: &str) -> Result<BitRate, String> {
 
     match BitRate::from_number(bitrate) {
         Ok(b) => Ok(b),
-        Err(e) => Err(format!("{e:?}").into()),
+        Err(e) => Err(format!("{e:?}")),
     }
 }
 
@@ -60,7 +60,7 @@ fn main() {
             match download(
                 youtube_url.clone(),
                 dest_type.as_ref().unwrap().to_string(),
-                bitrate.clone(),
+                *bitrate,
             ) {
                 Ok(_) => eprintln!("info: download complete"),
                 Err(e) => eprintln!("error: {}", e),
