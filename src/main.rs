@@ -5,6 +5,8 @@ use url::Url;
 
 mod convert;
 use convert::download;
+mod bitrate;
+use bitrate::{BitRate, FromNumber};
 
 /// Top-level command-line argument specification
 #[derive(Parser)]
@@ -20,13 +22,25 @@ struct Cli {
 enum Commands {
     /// Converts YouTube videos to local mp3 files
     Download {
-        /// A valid YouTube URL
-        #[arg(long, value_name = "URL")]
-        youtube_url: Url,
+        /// The bitrate at which to download the MP3 file
+        #[arg(long, value_parser = bitrate_parser, value_name = "BITRATE")]
+        quality: Option<BitRate>,
         /// Where to store the returned MP3 file
         #[arg(long, value_parser = ["local", "ssh"], value_name = "TYPE", default_value = "local")]
         dest_type: Option<String>,
+        /// A valid YouTube URL
+        #[arg(long, value_name = "URL")]
+        youtube_url: Url,
     },
+}
+
+fn bitrate_parser(s: &str) -> Result<BitRate, String> {
+    let bitrate: u16 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+
+    match BitRate::from_number(bitrate) {
+        Ok(b) => Ok(b),
+        Err(e) => Err(format!("{e:?}").into()),
+    }
 }
 
 fn main() {
@@ -36,9 +50,21 @@ fn main() {
         Commands::Download {
             youtube_url,
             dest_type,
-        } => match download(youtube_url.clone(), dest_type.as_ref().unwrap().to_string()) {
-            Ok(_) => eprintln!("info: download complete"),
-            Err(e) => eprintln!("error: {}", e),
-        },
+            quality,
+        } => {
+            let bitrate = match quality {
+                Some(q) => q,
+                None => &BitRate::Kbps96,
+            };
+
+            match download(
+                youtube_url.clone(),
+                dest_type.as_ref().unwrap().to_string(),
+                bitrate.clone(),
+            ) {
+                Ok(_) => eprintln!("info: download complete"),
+                Err(e) => eprintln!("error: {}", e),
+            }
+        }
     }
 }

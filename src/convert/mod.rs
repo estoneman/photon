@@ -7,13 +7,25 @@ use std::path::Path;
 use std::process::exit;
 use url::Url;
 
+use crate::bitrate::BitRate;
+
+/// Enumerated list of supported formats to download youtube videos as
+/// * MP3 for audio
+/// * MP4 for video
+#[derive(Debug, Deserialize, Serialize)]
+#[repr(usize)]
+enum DLFormat {
+    MP4 = 0,
+    MP3 = 1,
+}
+
 /// Payload to send to `check_database.php` endpoint
 /// Used to retrieve video metadata as described by `CheckDatabaseVideoData`
 #[derive(Debug, Serialize)]
 struct PayloadCheckDatabase {
     #[serde(rename = "formatValue")]
-    format_value: i64,
-    quality: i64,
+    format_value: usize,
+    quality: BitRate,
     youtube_id: String,
 }
 
@@ -23,7 +35,7 @@ struct CheckDatabaseVideoData {
     #[serde(rename = "id")]
     _id: i64,
     #[serde(rename = "quality")]
-    _quality: String,
+    _quality: String, // NOTE: this is a String in the response, but number in the payload
     server_path: String,
     #[serde(rename = "title")]
     _title: String,
@@ -77,8 +89,8 @@ struct GetVideoDataError {
 #[derive(Debug, Serialize)]
 struct PayloadDownloadVideo {
     #[serde(rename = "formatValue")]
-    format_value: i64,
-    quality: i64,
+    format_value: usize,
+    quality: BitRate,
     title: String,
     url: Url,
 }
@@ -91,7 +103,6 @@ struct DownloadVideoData {
     _success: bool,
 }
 
-// TODO: enumerate `errorType`
 /// When the MP3 file could not be downloaded into one of the hosts in the cdn
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -107,8 +118,8 @@ struct DownloadVideoError {
 #[derive(Debug, Serialize)]
 struct PayloadInsertToDatabase {
     #[serde(rename = "formatValue")]
-    format_value: i64,
-    quality: i64,
+    format_value: usize,
+    quality: BitRate,
     server_path: String,
     title: String,
     youtube_id: String,
@@ -169,9 +180,9 @@ impl CNVClient {
     async fn check_database(
         &self,
         youtube_id: String,
+        quality: BitRate,
     ) -> Result<Value, Box<dyn std::error::Error>> {
-        let format_value: i64 = 1;
-        let quality: i64 = 5;
+        let format_value = DLFormat::MP3 as usize;
 
         let pcd = PayloadCheckDatabase {
             format_value,
@@ -245,9 +256,9 @@ impl CNVClient {
         &self,
         url: Url,
         title: String,
+        quality: BitRate,
     ) -> Result<Value, Box<dyn std::error::Error>> {
-        let quality: i64 = 5;
-        let format_value: i64 = 1;
+        let format_value = DLFormat::MP3 as usize;
 
         let pdv = PayloadDownloadVideo {
             format_value,
@@ -292,9 +303,9 @@ impl CNVClient {
         server_path: String,
         title: String,
         youtube_id: String,
+        quality: BitRate,
     ) -> Result<Value, Box<dyn std::error::Error>> {
-        let format_value: i64 = 1;
-        let quality: i64 = 5;
+        let format_value = DLFormat::MP3 as usize;
 
         let pid = PayloadInsertToDatabase {
             format_value,
@@ -352,10 +363,10 @@ impl CNVClient {
                 .expect("file creation should succeed");
 
             if let Err(e) = outfile.write_all(&download) {
-                println!("{:?}", e);
+                return Err(format!("{:?}", e).into());
             }
         } else {
-            println!("downloaded content is not an mp3 file");
+            return Err("downloaded content is not an mp3 file".into());
         }
 
         Ok(())
@@ -393,13 +404,18 @@ impl CNVClient {
 ///
 /// # Notes
 ///
-/// This function uses a custom CDN service to perform the conversion and downloading process. It handles checking whether the video is already saved as an MP3, fetching video data, inserting into the database, and downloading the MP3 file.
+/// This function uses a custom CDN service to perform the conversion and
+/// downloading process. It handles checking whether the video is already
+/// saved as an MP3, fetching video data, inserting into the database, and
+/// downloading the MP3 file.
 #[tokio::main]
 pub async fn download(
     youtube_url: Url,
     dest_type: String,
+    quality: BitRate,
 ) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(youtube_url.host_str(), Some("www.youtube.com"));
+    eprintln!("info: using bitrate = {quality:?}");
 
     let youtube_id: String = match youtube_url.query_pairs().next() {
         Some(v) => v.1.to_string(),
@@ -420,7 +436,7 @@ pub async fn download(
 
     let c = CNVClient { client, dest_type };
 
-    let checkdb_res = c.check_database(youtube_id.to_string()).await?;
+    let checkdb_res = c.check_database(youtube_id.to_string(), quality).await?;
 
     let success = match checkdb_res.get("success").and_then(|v| v.as_bool()) {
         Some(s) => s,
@@ -470,7 +486,9 @@ pub async fn download(
 
             let title = getvd.title;
 
-            let dv_res = c.srv_download(youtube_url.clone(), title.clone()).await?;
+            let dv_res = c
+                .srv_download(youtube_url.clone(), title.clone(), quality)
+                .await?;
 
             let success = match dv_res.get("success").and_then(|v| v.as_bool()) {
                 Some(s) => s,
@@ -495,7 +513,7 @@ pub async fn download(
             let download_link = dv.download_link;
 
             let dl_res = c
-                .cdn_insert(download_link.clone(), title, youtube_id.clone())
+                .cdn_insert(download_link.clone(), title, youtube_id.clone(), quality)
                 .await?;
 
             let success =
@@ -519,8 +537,9 @@ pub async fn download(
 
             eprintln!("info: {}", dl.message);
 
-            c.cdn_download(download_link, youtube_id.to_string())
-                .await?;
+            if let Err(e) = c.cdn_download(download_link, youtube_id.to_string()).await {
+                return Err(format!("error: {}", e).into());
+            };
         }
     }
 
@@ -537,7 +556,7 @@ mod tests {
             .expect("Url::parse should work");
         let dest_type = String::from("local");
 
-        let result = download(youtube_url.clone(), dest_type.clone());
+        let result = download(youtube_url.clone(), dest_type.clone(), BitRate::Kbps96);
         assert!(result.is_ok());
     }
 }
