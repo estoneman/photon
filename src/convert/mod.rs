@@ -9,9 +9,9 @@ use url::Url;
 
 use crate::bitrate::BitRate;
 
-const PATTERN_EMBED: &str = r"^.+\/embed";
-const PATTERN_SHORT: &str = r"^.+\/shorts";
-const PATTERN_REGULAR: &str = r"^.+\/watch";
+const PATTERN_EMBED: &str = r"^\/embed";
+const PATTERN_SHORT: &str = r"^\/shorts";
+const PATTERN_REGULAR: &str = r"^\/watch";
 
 /// Enumerated list of supported formats to download youtube videos as
 /// * MP3 for audio
@@ -454,13 +454,13 @@ impl YouTubeURL {
         let short_pattern = Regex::new(PATTERN_SHORT).unwrap();
         let regular_pattern = Regex::new(PATTERN_REGULAR).unwrap();
 
-        let url_str = url.as_str();
+        let path = url.path();
 
-        let r#type = if !regular_pattern.is_match(url_str) {
+        let r#type = if regular_pattern.is_match(path) {
             YouTubeURLKind::Regular
-        } else if !short_pattern.is_match(url_str) {
+        } else if short_pattern.is_match(path) {
             YouTubeURLKind::Short
-        } else if !embed_pattern.is_match(url_str) {
+        } else if embed_pattern.is_match(path) {
             YouTubeURLKind::Embed
         } else {
             YouTubeURLKind::Invalid
@@ -496,17 +496,14 @@ impl YouTubeURL {
 
         match r#type {
             YouTubeURLKind::Invalid => {
-                return Err(PhotonError {
-                    kind: PhotonErrorKind::InvalidURLType,
-                    msg: format!("bad type: {}", r#type),
-                });
+                youtube_id = String::from("invalid");
             }
             _ => {
                 let id_pattern =
                     Regex::new(r"(?:(?:shorts|embed)\/(\S+)\/?)|(?:watch\?v=(\S+))").unwrap();
 
                 for (_, [id]) in id_pattern.captures_iter(url.as_str()).map(|c| c.extract()) {
-                    youtube_id = id.to_string();
+                    youtube_id = String::from(id);
                 }
             }
         }
@@ -692,19 +689,63 @@ mod tests {
     #[test]
     fn test_get_id() {
         let test_cases = vec![
-            ("https://www.youtube.com/watch?v=yPvoKz6tyJs", "yPvoKz6tyJs"),
-            ("https://www.youtube.com/embed/3rLN_-VNcfs", "3rLN_-VNcfs"),
-            ("https://www.youtube.com/shorts/3rLN_-VNcfs", "3rLN_-VNcfs"),
+            (
+                "https://www.youtube.com/watch?v=yPvoKz6tyJs",
+                YouTubeURLKind::Regular,
+                "yPvoKz6tyJs",
+            ),
+            (
+                "https://www.youtube.com/embed/3rLN_-VNcfs",
+                YouTubeURLKind::Embed,
+                "3rLN_-VNcfs",
+            ),
+            (
+                "https://www.youtube.com/shorts/3rLN_-VNcfs",
+                YouTubeURLKind::Short,
+                "3rLN_-VNcfs",
+            ),
+            (
+                "https://www.youtube.com/invalid/invalid",
+                YouTubeURLKind::Invalid,
+                "invalid",
+            ),
         ];
 
-        for (url, exp) in test_cases {
-            let youtube_url = YouTubeURL::new(Url::parse(url).unwrap()).expect("This should work");
-            assert_eq!(youtube_url.id, exp);
+        for (url, r#type, exp) in test_cases {
+            let id = YouTubeURL::get_id(Url::parse(url).unwrap(), r#type).unwrap();
+            assert_eq!(id, exp);
         }
     }
 
     #[test]
-    fn test_download_ok() {
+    fn test_get_type() {
+        let test_cases = vec![
+            (
+                "https://www.youtube.com/shorts/3rLN_-VNcfs",
+                YouTubeURLKind::Short,
+            ),
+            (
+                "https://www.youtube.com/embed/3rLN_-VNcfs",
+                YouTubeURLKind::Embed,
+            ),
+            (
+                "https://www.youtube.com/watch?v=yPvoKz6tyJs",
+                YouTubeURLKind::Regular,
+            ),
+            (
+                "https://www.youtube.com/invalid/invalid",
+                YouTubeURLKind::Invalid,
+            ),
+        ];
+
+        for (url, exp) in test_cases {
+            let r#type = YouTubeURL::get_type(Url::parse(url).unwrap()).unwrap();
+            assert_eq!(r#type.to_string(), exp.to_string());
+        }
+    }
+
+    #[test]
+    fn test_download() {
         let youtube_url = Url::parse("https://www.youtube.com/watch?v=yPvoKz6tyJs")
             .expect("Url::parse should work");
         let dest_type = String::from("local");
