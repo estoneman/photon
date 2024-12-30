@@ -1,5 +1,4 @@
 use infer::audio::is_mp3;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs::File;
@@ -8,10 +7,8 @@ use std::path::Path;
 use url::Url;
 
 use crate::bitrate::BitRate;
-
-const PATTERN_EMBED: &str = r"^\/embed";
-const PATTERN_SHORT: &str = r"^\/shorts";
-const PATTERN_REGULAR: &str = r"^\/watch";
+use crate::error::{Error, ErrorKind};
+use crate::youtube_url::YouTubeURL;
 
 /// Enumerated list of supported formats to download youtube videos as
 /// * MP3 for audio
@@ -181,11 +178,8 @@ impl CNVClient {
     /// - The HTTP request to the server fails.
     /// - The response cannot be deserialized as valid JSON.
     /// - The `success` field is missing or invalid in the JSON response.
-    async fn check_database(
-        &self,
-        youtube_id: String,
-        quality: BitRate,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn check_database(&self, youtube_id: String, quality: BitRate) -> Result<Value, Error> {
+        // ) -> Result<Value, Box<dyn std::error::Error>> {
         let format_value = DLFormat::MP3 as usize;
 
         let pcd = PayloadCheckDatabase {
@@ -377,141 +371,6 @@ impl CNVClient {
     }
 }
 
-#[derive(Debug)]
-struct PhotonError {
-    kind: PhotonErrorKind,
-    msg: String,
-}
-
-#[derive(Debug)]
-enum PhotonErrorKind {
-    InvalidURL,
-    InvalidURLType,
-}
-
-impl std::fmt::Display for PhotonErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            Self::InvalidURL => writeln!(f, "InvalidURL"),
-            Self::InvalidURLType => writeln!(f, "InvalidURLType"),
-        }
-    }
-}
-
-impl std::fmt::Display for PhotonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Kind: {}, Message: {}", self.kind, self.msg)
-    }
-}
-
-impl std::error::Error for PhotonError {}
-
-#[derive(Clone, Debug)]
-enum YouTubeURLKind {
-    Short,
-    Embed,
-    Regular,
-    Invalid,
-}
-
-impl std::fmt::Display for YouTubeURLKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            YouTubeURLKind::Short => writeln!(f, "Short"),
-            YouTubeURLKind::Embed => writeln!(f, "Embed"),
-            YouTubeURLKind::Regular => writeln!(f, "Regular"),
-            YouTubeURLKind::Invalid => writeln!(f, "Invalid"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct YouTubeURL {
-    url: Url,
-    r#type: YouTubeURLKind,
-    id: String,
-}
-
-impl YouTubeURL {
-    fn new(url: Url) -> Result<Self, PhotonError> {
-        let r#type = YouTubeURL::get_type(url.clone())?;
-        let id = YouTubeURL::get_id(url.clone(), r#type.clone())?;
-
-        let youtube_url = YouTubeURL { url, r#type, id };
-
-        if let Err(e) = youtube_url.validate() {
-            return Err(PhotonError {
-                kind: PhotonErrorKind::InvalidURL,
-                msg: format!("error: {e:?}"),
-            });
-        };
-
-        Ok(youtube_url)
-    }
-
-    fn get_type(url: Url) -> Result<YouTubeURLKind, PhotonError> {
-        let embed_pattern = Regex::new(PATTERN_EMBED).unwrap();
-        let short_pattern = Regex::new(PATTERN_SHORT).unwrap();
-        let regular_pattern = Regex::new(PATTERN_REGULAR).unwrap();
-
-        let path = url.path();
-
-        let r#type = if regular_pattern.is_match(path) {
-            YouTubeURLKind::Regular
-        } else if short_pattern.is_match(path) {
-            YouTubeURLKind::Short
-        } else if embed_pattern.is_match(path) {
-            YouTubeURLKind::Embed
-        } else {
-            YouTubeURLKind::Invalid
-        };
-
-        Ok(r#type)
-    }
-
-    fn validate(&self) -> Result<(), PhotonError> {
-        let pattern = Regex::new(
-            r"(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|embed|watch|shorts)\/|.*[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[&?]|$)"
-        ).unwrap();
-
-        if !pattern.is_match(self.url.as_str()) {
-            return Err(PhotonError {
-                kind: PhotonErrorKind::InvalidURL,
-                msg: format!("bad url: {}", self.url.as_str()),
-            });
-        }
-
-        if let YouTubeURLKind::Invalid = self.r#type {
-            return Err(PhotonError {
-                kind: PhotonErrorKind::InvalidURLType,
-                msg: format!("bad type: {}", self.r#type),
-            });
-        };
-
-        Ok(())
-    }
-
-    fn get_id(url: Url, r#type: YouTubeURLKind) -> Result<String, PhotonError> {
-        let mut youtube_id = String::from("");
-
-        match r#type {
-            YouTubeURLKind::Invalid => {
-                youtube_id = String::from("invalid");
-            }
-            _ => {
-                let id_pattern =
-                    Regex::new(r"(?:(?:shorts|embed)\/(\S+)\/?)|(?:watch\?v=(\S+))").unwrap();
-
-                for (_, [id]) in id_pattern.captures_iter(url.as_str()).map(|c| c.extract()) {
-                    youtube_id = String::from(id);
-                }
-            }
-        }
-
-        Ok(youtube_id)
-    }
-}
-
 /// Converts a YouTube video to an MP3 file and downloads it.
 ///
 /// # Arguments
@@ -548,11 +407,7 @@ impl YouTubeURL {
 /// saved as an MP3, fetching video data, inserting into the database, and
 /// downloading the MP3 file.
 #[tokio::main]
-pub async fn download(
-    url: Url,
-    dest_type: String,
-    quality: BitRate,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn download(url: Url, dest_type: String, quality: BitRate) -> Result<(), Error> {
     eprintln!("info: using bitrate = {quality:?}");
 
     let youtube_url = YouTubeURL::new(url).unwrap();
@@ -571,9 +426,13 @@ pub async fn download(
     let success = match checkdb_res.get("success").and_then(|v| v.as_bool()) {
         Some(s) => s,
         None => {
-            return Err(
-                "Unable to reference field `success` in /check_database.php response".into(),
-            )
+            return Err(Error {
+                kind: ErrorKind::InvalidJSON,
+                value: format!(
+                    "{}: unable to reference field `success` in check_database.php response",
+                    checkdb_res
+                ),
+            });
         }
     };
 
@@ -598,10 +457,10 @@ pub async fn download(
             let success = match getvd_res.get("success").and_then(|v| v.as_bool()) {
                 Some(s) => s,
                 None => {
-                    return Err(
-                        "Unable to reference field `success` in /get_video_data.php response"
-                            .into(),
-                    )
+                    return Err(Error {
+                        kind: ErrorKind::InvalidJSON,
+                        value: format!("{}: unable to reference field `success` in get_video_data.php response", getvd_res),
+                    });
                 }
             };
 
@@ -609,7 +468,10 @@ pub async fn download(
                 let error: GetVideoDataError =
                     serde_json::from_value::<GetVideoDataError>(getvd_res)
                         .expect("Parsing as GetVideoDataError should work");
-                return Err(format!("/get_video_data.php failed.. {}", error.error).into());
+                return Err(Error {
+                    kind: ErrorKind::CNVResponseError,
+                    value: format!("get_video_data.php failed: {}", error.error),
+                });
             }
 
             let getvd: GetVideoData = serde_json::from_value::<GetVideoData>(getvd_res)
@@ -624,10 +486,12 @@ pub async fn download(
             let success = match dv_res.get("success").and_then(|v| v.as_bool()) {
                 Some(s) => s,
                 None => {
-                    return Err(
-                        "Unable to reference field `success` in /download_video.php response"
-                            .into(),
-                    )
+                    return Err(Error {
+                        kind: ErrorKind::InvalidJSON,
+                        value:
+                            "Unable to reference field `success` in /download_video.php response"
+                                .into(),
+                    });
                 }
             };
 
@@ -635,7 +499,10 @@ pub async fn download(
                 let error: DownloadVideoError =
                     serde_json::from_value::<DownloadVideoError>(dv_res)
                         .expect("Parsing as DownloadVideoError should work");
-                return Err(format!("/download_video.php failed.. {}", error.error).into());
+                return Err(Error {
+                    kind: ErrorKind::CNVResponseError,
+                    value: format!("/download_video.php failed: {}", error.error),
+                });
             }
 
             let dv: DownloadVideoData = serde_json::from_value::<DownloadVideoData>(dv_res)
@@ -652,20 +519,24 @@ pub async fn download(
                 )
                 .await?;
 
-            let success =
-                match dl_res.get("success").and_then(|v| v.as_bool()) {
-                    Some(s) => s,
-                    None => return Err(
-                        "Unable to reference field `success` in /insert_to_database.php response"
-                            .into(),
-                    ),
-                };
+            let success = match dl_res.get("success").and_then(|v| v.as_bool()) {
+                Some(s) => s,
+                None => {
+                    return Err(Error {
+                            kind: ErrorKind::InvalidJSON,
+                            value: "Unable to reference field `success` in /insert_to_database.php response".into(),
+                        });
+                }
+            };
 
             if !success {
                 let error: InsertToDatabaseError =
                     serde_json::from_value::<InsertToDatabaseError>(dl_res)
                         .expect("Parsing as InsertToDatabaseError should work");
-                return Err(format!("/insert_to_database.php failed.. {}", error.error).into());
+                return Err(Error {
+                    kind: ErrorKind::CNVResponseError,
+                    value: format!("/insert_to_database.php failed: {}", error.error),
+                });
             }
 
             let dl: InsertToDatabaseData = serde_json::from_value::<InsertToDatabaseData>(dl_res)
@@ -685,64 +556,6 @@ pub async fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_get_id() {
-        let test_cases = vec![
-            (
-                "https://www.youtube.com/watch?v=yPvoKz6tyJs",
-                YouTubeURLKind::Regular,
-                "yPvoKz6tyJs",
-            ),
-            (
-                "https://www.youtube.com/embed/3rLN_-VNcfs",
-                YouTubeURLKind::Embed,
-                "3rLN_-VNcfs",
-            ),
-            (
-                "https://www.youtube.com/shorts/3rLN_-VNcfs",
-                YouTubeURLKind::Short,
-                "3rLN_-VNcfs",
-            ),
-            (
-                "https://www.youtube.com/invalid/invalid",
-                YouTubeURLKind::Invalid,
-                "invalid",
-            ),
-        ];
-
-        for (url, r#type, exp) in test_cases {
-            let id = YouTubeURL::get_id(Url::parse(url).unwrap(), r#type).unwrap();
-            assert_eq!(id, exp);
-        }
-    }
-
-    #[test]
-    fn test_get_type() {
-        let test_cases = vec![
-            (
-                "https://www.youtube.com/shorts/3rLN_-VNcfs",
-                YouTubeURLKind::Short,
-            ),
-            (
-                "https://www.youtube.com/embed/3rLN_-VNcfs",
-                YouTubeURLKind::Embed,
-            ),
-            (
-                "https://www.youtube.com/watch?v=yPvoKz6tyJs",
-                YouTubeURLKind::Regular,
-            ),
-            (
-                "https://www.youtube.com/invalid/invalid",
-                YouTubeURLKind::Invalid,
-            ),
-        ];
-
-        for (url, exp) in test_cases {
-            let r#type = YouTubeURL::get_type(Url::parse(url).unwrap()).unwrap();
-            assert_eq!(r#type.to_string(), exp.to_string());
-        }
-    }
 
     #[test]
     fn test_download() {
