@@ -3,10 +3,13 @@
 use clap::{command, Parser, Subcommand};
 use url::Url;
 
-mod convert;
-use convert::download;
 mod bitrate;
+mod convert;
+mod error;
+mod youtube_url;
+
 use bitrate::{BitRate, FromNumber};
+use convert::download;
 
 /// Top-level command-line argument specification
 #[derive(Parser)]
@@ -52,15 +55,15 @@ fn main() {
             dest_type,
             quality,
         } => {
-            let bitrate = match quality {
-                Some(q) => q,
-                None => &BitRate::Kbps96,
+            let bitrate: BitRate = match quality {
+                Some(q) => *q,
+                None => BitRate::Kbps96,
             };
 
             match download(
                 youtube_url.clone(),
                 dest_type.as_ref().unwrap().to_string(),
-                *bitrate,
+                bitrate,
             ) {
                 Ok(_) => eprintln!("info: download complete"),
                 Err(e) => eprintln!("error: {}", e),
