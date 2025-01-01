@@ -35,6 +35,19 @@ enum Commands {
         #[arg(long, value_name = "URL")]
         youtube_url: Url,
     },
+    /// Migrates mp3 files from a source to a destination (e.g., remote server to local or vice
+    /// versa)
+    Migrate {
+        /// Source from which you want to move MP3 file
+        #[arg(long, value_name = "FROM")]
+        from: String,
+        /// Destination to which you want to move MP3 file
+        #[arg(long, value_name = "TO")]
+        to: String,
+        /// YouTube ID of MP3 file
+        #[arg(long, value_name = "ID")]
+        youtube_id: String,
+    },
 }
 
 fn bitrate_parser(s: &str) -> Result<BitRate, String> {
@@ -68,6 +81,14 @@ fn main() {
                 Ok(_) => eprintln!("info: conversion complete"),
                 Err(e) => eprintln!("error: {}", e),
             }
+        }
+        Commands::Migrate {
+            from,
+            to,
+            youtube_id,
+        } => {
+            eprintln!("id: {}, from: {}, to: {}", youtube_id, from, to);
+            todo!();
         }
     }
 }
