@@ -9,7 +9,7 @@ mod error;
 mod youtube_url;
 
 use bitrate::{BitRate, FromNumber};
-use convert::download;
+use convert::y2mp3;
 
 /// Top-level command-line argument specification
 #[derive(Parser)]
@@ -24,7 +24,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Converts YouTube videos to local mp3 files
-    Download {
+    Y2Mp3 {
         /// The bitrate at which to download the MP3 file
         #[arg(long, value_parser = bitrate_parser, value_name = "BITRATE")]
         quality: Option<BitRate>,
@@ -50,7 +50,7 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Download {
+        Commands::Y2Mp3 {
             youtube_url,
             dest_type,
             quality,
@@ -60,12 +60,12 @@ fn main() {
                 None => BitRate::Kbps96,
             };
 
-            match download(
+            match y2mp3(
                 youtube_url.clone(),
                 dest_type.as_ref().unwrap().to_string(),
                 bitrate,
             ) {
-                Ok(_) => eprintln!("info: download complete"),
+                Ok(_) => eprintln!("info: conversion complete"),
                 Err(e) => eprintln!("error: {}", e),
             }
         }
