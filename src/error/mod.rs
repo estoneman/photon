@@ -8,7 +8,6 @@ pub struct Error {
 pub enum ErrorKind {
     InvalidURL,
     InvalidURLType,
-    InvalidJSON,
     CNVResponseError,
     ReqwestError,
     SerdeError,
@@ -21,7 +20,6 @@ impl std::fmt::Display for ErrorKind {
         match *self {
             Self::InvalidURL => writeln!(f, "InvalidURL"),
             Self::InvalidURLType => writeln!(f, "InvalidURLType"),
-            Self::InvalidJSON => writeln!(f, "InvalidJSON"),
             Self::CNVResponseError => writeln!(f, "JSONParseError"),
             Self::ReqwestError => writeln!(f, "ReqwestError"),
             Self::SerdeError => writeln!(f, "SerdeError"),
