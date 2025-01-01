@@ -216,7 +216,6 @@ impl CNVClient {
         youtube_id: String,
         quality: BitRate,
     ) -> Result<ResponseCheckDatabase, Error> {
-        // ) -> Result<Value, Box<dyn std::error::Error>> {
         let format_value = DLFormat::MP3 as usize;
 
         let pcd = PayloadCheckDatabase {
@@ -261,7 +260,6 @@ impl CNVClient {
     /// Returns a `Result` containing a `String` with the YouTube video ID if the operation succeeds,
     /// or an error (`Box<dyn std::error::Error>`) if the request fails or the service does not return
     /// the expected response.
-    // async fn cdn_fetch(&self, url: Url) -> Result<Value, Box<dyn std::error::Error>> {
     async fn cdn_fetch(&self, url: Url) -> Result<ResponseGetVideoData, Error> {
         let pgvd = PayloadGetVideoData { url };
 
