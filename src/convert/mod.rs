@@ -466,7 +466,9 @@ pub async fn y2mp3(url: Url, dest_type: String, quality: BitRate) -> Result<(), 
 
     match checkdb_res {
         ResponseCheckDatabase::Exist { _success, data } => {
-            c.cdn_download(data.server_path, youtube_url.id).await?;
+            if let Err(e) = c.cdn_download(data.server_path, youtube_url.id).await {
+                return Err(format!("error: {}", e).into());
+            }
         }
         ResponseCheckDatabase::NoExist { _success, error } => {
             eprintln!("info: {}", error);
