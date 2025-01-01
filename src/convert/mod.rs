@@ -1,6 +1,5 @@
 use infer::audio::is_mp3;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -44,21 +43,24 @@ struct CheckDatabaseVideoData {
     _youtube_id: String,
 }
 
-/// When a video is found in the cnvmp3 database
-#[derive(Debug, Deserialize)]
-struct CheckDatabaseExist {
-    data: CheckDatabaseVideoData,
-    #[serde(rename = "success")]
-    _success: bool,
-}
-
+/// When a video is found in the cnvmp3 database (Exist)
+///
 /// When a video is not found in the cnvmp3 database
 /// `error` will describe what happened on cnvmp3's side
+/// (NoExist)
 #[derive(Debug, Deserialize)]
-struct CheckDatabaseNoExist {
-    error: String,
-    #[serde(rename = "success")]
-    _success: bool,
+#[serde(untagged)]
+enum ResponseCheckDatabase {
+    Exist {
+        #[serde(rename = "success")]
+        _success: bool,
+        data: CheckDatabaseVideoData,
+    },
+    NoExist {
+        #[serde(rename = "success")]
+        _success: bool,
+        error: String,
+    },
 }
 
 /// Payload to send to `get_video_data.php` endpoint
@@ -68,20 +70,19 @@ struct PayloadGetVideoData {
     url: Url,
 }
 
-/// When successful, cnvmp3 will return the title of the video
 #[derive(Debug, Deserialize)]
-struct GetVideoData {
-    #[serde(rename = "success")]
-    _success: bool,
-    title: String,
-}
-
-/// When a failure occurs, cnvmp3 will return the error encountered
-#[derive(Debug, Deserialize)]
-struct GetVideoDataError {
-    #[serde(rename = "success")]
-    _success: bool,
-    error: String,
+#[serde(untagged)]
+enum ResponseGetVideoData {
+    Success {
+        #[serde(rename = "success")]
+        _success: bool,
+        title: String,
+    },
+    Fail {
+        #[serde(rename = "success")]
+        _success: bool,
+        error: String,
+    },
 }
 
 /// Payload to send to `download_video.php` endpoint
@@ -97,21 +98,22 @@ struct PayloadDownloadVideo {
 }
 
 /// When successful, cnvmp3 will return the remote location from which the MP3 file can be download
-#[derive(Debug, Deserialize)]
-struct DownloadVideoData {
-    download_link: String,
-    #[serde(rename = "success")]
-    _success: bool,
-}
-
+///
 /// When the MP3 file could not be downloaded into one of the hosts in the cdn
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-struct DownloadVideoError {
-    error: String,
-    #[serde(rename = "errorType")]
-    error_type: i64,
-    success: bool,
+#[serde(untagged)]
+enum ResponseDownloadVideo {
+    Success {
+        download_link: String,
+        #[serde(rename = "success")]
+        _success: bool,
+    },
+    Fail {
+        error: String,
+        #[serde(rename = "errorType")]
+        error_type: i64,
+        _success: bool,
+    },
 }
 
 /// Payload to send to `insert_to_database.php` endpoint
@@ -127,19 +129,21 @@ struct PayloadInsertToDatabase {
 }
 
 /// Upon success, cnvmp3 will return the success messsage
-#[derive(Debug, Deserialize)]
-struct InsertToDatabaseData {
-    #[serde(rename = "success")]
-    _success: bool,
-    message: String,
-}
-
+///
 /// Upon failure, the error encountered will be returned
 #[derive(Debug, Deserialize)]
-struct InsertToDatabaseError {
-    #[serde(rename = "success")]
-    _success: bool,
-    error: String,
+#[serde(untagged)]
+enum ResponseInsertToDatabase {
+    Success {
+        #[serde(rename = "success")]
+        _success: bool,
+        message: String,
+    },
+    Fail {
+        #[serde(rename = "success")]
+        _success: bool,
+        error: String,
+    },
 }
 
 /// Custom wrapper for `reqwest::Client`
@@ -178,7 +182,11 @@ impl CNVClient {
     /// - The HTTP request to the server fails.
     /// - The response cannot be deserialized as valid JSON.
     /// - The `success` field is missing or invalid in the JSON response.
-    async fn check_database(&self, youtube_id: String, quality: BitRate) -> Result<Value, Error> {
+    async fn check_database(
+        &self,
+        youtube_id: String,
+        quality: BitRate,
+    ) -> Result<ResponseCheckDatabase, Error> {
         // ) -> Result<Value, Box<dyn std::error::Error>> {
         let format_value = DLFormat::MP3 as usize;
 
@@ -195,11 +203,19 @@ impl CNVClient {
             .header("Accept", "application/json")
             .json(&pcd)
             .send()
-            .await?
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("HTTP request failed: {}", e),
+            })?
             .bytes()
-            .await?;
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("Failed to read response as bytes: {}", e),
+            })?;
 
-        let checkdb_parsed: Value = serde_json::from_slice(checkdb_res.as_ref())?;
+        let checkdb_parsed: ResponseCheckDatabase = serde_json::from_slice(checkdb_res.as_ref())?;
 
         Ok(checkdb_parsed)
     }
@@ -216,7 +232,8 @@ impl CNVClient {
     /// Returns a `Result` containing a `String` with the YouTube video ID if the operation succeeds,
     /// or an error (`Box<dyn std::error::Error>`) if the request fails or the service does not return
     /// the expected response.
-    async fn cdn_fetch(&self, url: Url) -> Result<Value, Box<dyn std::error::Error>> {
+    // async fn cdn_fetch(&self, url: Url) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn cdn_fetch(&self, url: Url) -> Result<ResponseGetVideoData, Error> {
         let pgvd = PayloadGetVideoData { url };
 
         let gvd_res = self
@@ -226,11 +243,19 @@ impl CNVClient {
             .header("Accept", "application/json")
             .json(&pgvd)
             .send()
-            .await?
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("HTTP request failed: {}", e),
+            })?
             .bytes()
-            .await?;
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("Failed to read response as bytes: {}", e),
+            })?;
 
-        let gvd_parsed: Value = serde_json::from_slice(gvd_res.as_ref())?;
+        let gvd_parsed: ResponseGetVideoData = serde_json::from_slice(gvd_res.as_ref())?;
 
         Ok(gvd_parsed)
     }
@@ -255,7 +280,7 @@ impl CNVClient {
         url: Url,
         title: String,
         quality: BitRate,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    ) -> Result<ResponseDownloadVideo, Error> {
         let format_value = DLFormat::MP3 as usize;
 
         let pdv = PayloadDownloadVideo {
@@ -272,11 +297,19 @@ impl CNVClient {
             .header("Accept", "application/json")
             .json(&pdv)
             .send()
-            .await?
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("HTTP request failed: {}", e),
+            })?
             .bytes()
-            .await?;
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("Failed to read response as bytes: {}", e),
+            })?;
 
-        let dv_parsed: Value = serde_json::from_slice(dv_res.as_ref())?;
+        let dv_parsed: ResponseDownloadVideo = serde_json::from_slice(dv_res.as_ref())?;
 
         Ok(dv_parsed)
     }
@@ -302,7 +335,7 @@ impl CNVClient {
         title: String,
         youtube_id: String,
         quality: BitRate,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    ) -> Result<ResponseInsertToDatabase, Error> {
         let format_value = DLFormat::MP3 as usize;
 
         let pid = PayloadInsertToDatabase {
@@ -320,11 +353,19 @@ impl CNVClient {
             .header("Accept", "application/json")
             .json(&pid)
             .send()
-            .await?
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("HTTP request failed: {}", e),
+            })?
             .bytes()
-            .await?;
+            .await
+            .map_err(|e| Error {
+                kind: ErrorKind::ReqwestError,
+                value: format!("Failed to read response as bytes: {}", e),
+            })?;
 
-        let ins_parsed: Value = serde_json::from_slice(ins_res.as_ref())?;
+        let ins_parsed: ResponseInsertToDatabase = serde_json::from_slice(ins_res.as_ref())?;
 
         Ok(ins_parsed)
     }
@@ -407,7 +448,7 @@ impl CNVClient {
 /// saved as an MP3, fetching video data, inserting into the database, and
 /// downloading the MP3 file.
 #[tokio::main]
-pub async fn download(url: Url, dest_type: String, quality: BitRate) -> Result<(), Error> {
+pub async fn y2mp3(url: Url, dest_type: String, quality: BitRate) -> Result<(), Error> {
     eprintln!("info: using bitrate = {quality:?}");
 
     let youtube_url = YouTubeURL::new(url).unwrap();
@@ -423,132 +464,66 @@ pub async fn download(url: Url, dest_type: String, quality: BitRate) -> Result<(
 
     let checkdb_res = c.check_database(youtube_url.id.clone(), quality).await?;
 
-    let success = match checkdb_res.get("success").and_then(|v| v.as_bool()) {
-        Some(s) => s,
-        None => {
-            return Err(Error {
-                kind: ErrorKind::InvalidJSON,
-                value: format!(
-                    "{}: unable to reference field `success` in check_database.php response",
-                    checkdb_res
-                ),
-            });
+    match checkdb_res {
+        ResponseCheckDatabase::Exist { _success, data } => {
+            c.cdn_download(data.server_path, youtube_url.id).await?;
         }
-    };
+        ResponseCheckDatabase::NoExist { _success, error } => {
+            eprintln!("info: {}", error);
+            let gvd_res = c.cdn_fetch(youtube_url.url.clone()).await?;
 
-    match success {
-        // response contains server_path, use it
-        true => {
-            let checkdb: CheckDatabaseExist =
-                serde_json::from_value::<CheckDatabaseExist>(checkdb_res)
-                    .expect("Parsing as CheckDatabaseExist should work");
-            c.cdn_download(checkdb.data.server_path, youtube_url.id)
-                .await?;
-        }
-        // response does not contain server_path, go get it
-        false => {
-            let error: CheckDatabaseNoExist =
-                serde_json::from_value::<CheckDatabaseNoExist>(checkdb_res)
-                    .expect("Parsing as CheckDatabaseNoExist should work");
-            eprintln!("info: {}", error.error);
-
-            let getvd_res = c.cdn_fetch(youtube_url.url.clone()).await?;
-
-            let success = match getvd_res.get("success").and_then(|v| v.as_bool()) {
-                Some(s) => s,
-                None => {
+            let title = match gvd_res {
+                ResponseGetVideoData::Success { _success, title } => title,
+                ResponseGetVideoData::Fail { _success, error } => {
                     return Err(Error {
-                        kind: ErrorKind::InvalidJSON,
-                        value: format!("{}: unable to reference field `success` in get_video_data.php response", getvd_res),
+                        kind: ErrorKind::CNVResponseError,
+                        value: format!("get_video_data.php failed: {}", error),
                     });
                 }
             };
-
-            if !success {
-                let error: GetVideoDataError =
-                    serde_json::from_value::<GetVideoDataError>(getvd_res)
-                        .expect("Parsing as GetVideoDataError should work");
-                return Err(Error {
-                    kind: ErrorKind::CNVResponseError,
-                    value: format!("get_video_data.php failed: {}", error.error),
-                });
-            }
-
-            let getvd: GetVideoData = serde_json::from_value::<GetVideoData>(getvd_res)
-                .expect("Parsing as GetVideoData should work");
-
-            let title = getvd.title;
 
             let dv_res = c
                 .srv_download(youtube_url.url, title.clone(), quality)
                 .await?;
 
-            let success = match dv_res.get("success").and_then(|v| v.as_bool()) {
-                Some(s) => s,
-                None => {
+            let dl_link = match dv_res {
+                ResponseDownloadVideo::Success {
+                    download_link,
+                    _success,
+                } => download_link,
+                ResponseDownloadVideo::Fail {
+                    error,
+                    error_type,
+                    _success,
+                } => {
                     return Err(Error {
-                        kind: ErrorKind::InvalidJSON,
-                        value:
-                            "Unable to reference field `success` in /download_video.php response"
-                                .into(),
+                        kind: ErrorKind::CNVResponseError,
+                        value: format!("download_video.php failed: {} {}", error_type, error),
                     });
                 }
             };
 
-            if !success {
-                let error: DownloadVideoError =
-                    serde_json::from_value::<DownloadVideoError>(dv_res)
-                        .expect("Parsing as DownloadVideoError should work");
-                return Err(Error {
-                    kind: ErrorKind::CNVResponseError,
-                    value: format!("/download_video.php failed: {}", error.error),
-                });
-            }
-
-            let dv: DownloadVideoData = serde_json::from_value::<DownloadVideoData>(dv_res)
-                .expect("Parsing as DownloadVideoData should work");
-
-            let download_link = dv.download_link;
-
             let dl_res = c
-                .cdn_insert(
-                    download_link.clone(),
-                    title,
-                    youtube_url.id.clone(),
-                    quality,
-                )
+                .cdn_insert(dl_link.clone(), title, youtube_url.id.clone(), quality)
                 .await?;
 
-            let success = match dl_res.get("success").and_then(|v| v.as_bool()) {
-                Some(s) => s,
-                None => {
-                    return Err(Error {
-                            kind: ErrorKind::InvalidJSON,
-                            value: "Unable to reference field `success` in /insert_to_database.php response".into(),
-                        });
+            match dl_res {
+                ResponseInsertToDatabase::Success { _success, message } => {
+                    eprintln!("info: {}", message);
                 }
-            };
-
-            if !success {
-                let error: InsertToDatabaseError =
-                    serde_json::from_value::<InsertToDatabaseError>(dl_res)
-                        .expect("Parsing as InsertToDatabaseError should work");
-                return Err(Error {
-                    kind: ErrorKind::CNVResponseError,
-                    value: format!("/insert_to_database.php failed: {}", error.error),
-                });
+                ResponseInsertToDatabase::Fail { _success, error } => {
+                    return Err(Error {
+                        kind: ErrorKind::CNVResponseError,
+                        value: format!("insert_to_dtabase.php failed: {}", error),
+                    });
+                }
             }
 
-            let dl: InsertToDatabaseData = serde_json::from_value::<InsertToDatabaseData>(dl_res)
-                .expect("Parsing as InsertToDatabaseData should work");
-
-            eprintln!("info: {}", dl.message);
-
-            if let Err(e) = c.cdn_download(download_link, youtube_url.id).await {
+            if let Err(e) = c.cdn_download(dl_link, youtube_url.id).await {
                 return Err(format!("error: {}", e).into());
-            };
+            }
         }
-    }
+    };
 
     Ok(())
 }
@@ -558,12 +533,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_download() {
+    fn test_y2mp3() {
         let youtube_url = Url::parse("https://www.youtube.com/watch?v=yPvoKz6tyJs")
             .expect("Url::parse should work");
         let dest_type = String::from("local");
 
-        let result = download(youtube_url.clone(), dest_type.clone(), BitRate::Kbps96);
+        let result = y2mp3(youtube_url.clone(), dest_type.clone(), BitRate::Kbps96);
         assert!(result.is_ok());
     }
 }
