@@ -29,9 +29,9 @@ struct PayloadCheckDatabase {
     youtube_id: String,
 }
 
-/// When a video is found in its database, cnvmp3 will return this video data
+/// Metadata of a YouTube video as defined by cnvmp3
 #[derive(Debug, Deserialize)]
-struct CheckDatabaseVideoData {
+struct VideoData {
     #[serde(rename = "id")]
     _id: i64,
     #[serde(rename = "quality")]
@@ -43,6 +43,22 @@ struct CheckDatabaseVideoData {
     _youtube_id: String,
 }
 
+/// Response schema of successfully fulfilled request to `/check_database.php`
+#[derive(Debug, Deserialize)]
+struct CheckDatabaseSuccess {
+    #[serde(rename = "success")]
+    _success: bool,
+    data: VideoData,
+}
+
+/// Response schema of a failed request to `/check_database.php`
+#[derive(Debug, Deserialize)]
+struct CheckDatabaseFail {
+    #[serde(rename = "success")]
+    _success: bool,
+    error: String,
+}
+
 /// When a video is found in the cnvmp3 database (Exist)
 ///
 /// When a video is not found in the cnvmp3 database
@@ -51,16 +67,8 @@ struct CheckDatabaseVideoData {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ResponseCheckDatabase {
-    Exist {
-        #[serde(rename = "success")]
-        _success: bool,
-        data: CheckDatabaseVideoData,
-    },
-    NoExist {
-        #[serde(rename = "success")]
-        _success: bool,
-        error: String,
-    },
+    Exist(CheckDatabaseSuccess),
+    NoExist(CheckDatabaseFail),
 }
 
 /// Payload to send to `get_video_data.php` endpoint
@@ -70,19 +78,28 @@ struct PayloadGetVideoData {
     url: Url,
 }
 
+/// Response schema upon successfully fulfilled request to `/get_video_data.php`
+#[derive(Debug, Deserialize)]
+struct GetVideoDataSuccess {
+    #[serde(rename = "success")]
+    _success: bool,
+    title: String,
+}
+
+/// Response schema upon failed request to `/get_video_data.php`
+#[derive(Debug, Deserialize)]
+struct GetVideoDataFail {
+    #[serde(rename = "success")]
+    _success: bool,
+    error: String,
+}
+
+/// Possibilities of responses to requests made to `/get_video_data.php`
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ResponseGetVideoData {
-    Success {
-        #[serde(rename = "success")]
-        _success: bool,
-        title: String,
-    },
-    Fail {
-        #[serde(rename = "success")]
-        _success: bool,
-        error: String,
-    },
+    Success(GetVideoDataSuccess),
+    Fail(GetVideoDataFail),
 }
 
 /// Payload to send to `download_video.php` endpoint
@@ -97,23 +114,29 @@ struct PayloadDownloadVideo {
     url: Url,
 }
 
-/// When successful, cnvmp3 will return the remote location from which the MP3 file can be download
-///
-/// When the MP3 file could not be downloaded into one of the hosts in the cdn
+/// Response schema upon successfully fulfilled request to `/download_video.php`
+#[derive(Debug, Deserialize)]
+struct DownloadVideoSuccess {
+    download_link: String,
+    #[serde(rename = "success")]
+    _success: bool,
+}
+
+/// Response schema upon failed request to `/download_video.php`
+#[derive(Debug, Deserialize)]
+struct DownloadVideoFail {
+    error: String,
+    #[serde(rename = "errorType")]
+    error_type: i64,
+    _success: bool,
+}
+
+/// Possibilities of responses to requests made to `/download_video.php`
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ResponseDownloadVideo {
-    Success {
-        download_link: String,
-        #[serde(rename = "success")]
-        _success: bool,
-    },
-    Fail {
-        error: String,
-        #[serde(rename = "errorType")]
-        error_type: i64,
-        _success: bool,
-    },
+    Success(DownloadVideoSuccess),
+    Fail(DownloadVideoFail),
 }
 
 /// Payload to send to `insert_to_database.php` endpoint
@@ -128,22 +151,28 @@ struct PayloadInsertToDatabase {
     youtube_id: String,
 }
 
-/// Upon success, cnvmp3 will return the success messsage
-///
-/// Upon failure, the error encountered will be returned
+/// Response schema upon successfully fulfilled request to `/insert_to_database.php`
+#[derive(Debug, Deserialize)]
+struct InsertToDatabaseSuccess {
+    #[serde(rename = "success")]
+    _success: bool,
+    message: String,
+}
+
+/// Response schema upon failed request to `/insert_to_database.php`
+#[derive(Debug, Deserialize)]
+struct InsertToDatabaseFail {
+    #[serde(rename = "success")]
+    _success: bool,
+    error: String,
+}
+
+/// Possibilities of responses to requests made to `/insert_to_database.php`
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ResponseInsertToDatabase {
-    Success {
-        #[serde(rename = "success")]
-        _success: bool,
-        message: String,
-    },
-    Fail {
-        #[serde(rename = "success")]
-        _success: bool,
-        error: String,
-    },
+    Success(InsertToDatabaseSuccess),
+    Fail(InsertToDatabaseFail),
 }
 
 /// Custom wrapper for `reqwest::Client`
@@ -465,18 +494,18 @@ pub async fn y2mp3(url: Url, dest_type: String, quality: BitRate) -> Result<(), 
     let checkdb_res = c.check_database(youtube_url.id.clone(), quality).await?;
 
     match checkdb_res {
-        ResponseCheckDatabase::Exist { _success, data } => {
+        ResponseCheckDatabase::Exist(CheckDatabaseSuccess { data, _success }) => {
             if let Err(e) = c.cdn_download(data.server_path, youtube_url.id).await {
                 return Err(format!("error: {}", e).into());
             }
         }
-        ResponseCheckDatabase::NoExist { _success, error } => {
+        ResponseCheckDatabase::NoExist(CheckDatabaseFail { _success, error }) => {
             eprintln!("info: {}", error);
             let gvd_res = c.cdn_fetch(youtube_url.url.clone()).await?;
 
             let title = match gvd_res {
-                ResponseGetVideoData::Success { _success, title } => title,
-                ResponseGetVideoData::Fail { _success, error } => {
+                ResponseGetVideoData::Success(GetVideoDataSuccess { title, _success }) => title,
+                ResponseGetVideoData::Fail(GetVideoDataFail { error, _success }) => {
                     return Err(Error {
                         kind: ErrorKind::CNVResponseError,
                         value: format!("get_video_data.php failed: {}", error),
@@ -489,15 +518,15 @@ pub async fn y2mp3(url: Url, dest_type: String, quality: BitRate) -> Result<(), 
                 .await?;
 
             let dl_link = match dv_res {
-                ResponseDownloadVideo::Success {
+                ResponseDownloadVideo::Success(DownloadVideoSuccess {
                     download_link,
                     _success,
-                } => download_link,
-                ResponseDownloadVideo::Fail {
+                }) => download_link,
+                ResponseDownloadVideo::Fail(DownloadVideoFail {
                     error,
                     error_type,
                     _success,
-                } => {
+                }) => {
                     return Err(Error {
                         kind: ErrorKind::CNVResponseError,
                         value: format!("download_video.php failed: {} {}", error_type, error),
@@ -510,13 +539,16 @@ pub async fn y2mp3(url: Url, dest_type: String, quality: BitRate) -> Result<(), 
                 .await?;
 
             match dl_res {
-                ResponseInsertToDatabase::Success { _success, message } => {
+                ResponseInsertToDatabase::Success(InsertToDatabaseSuccess {
+                    message,
+                    _success,
+                }) => {
                     eprintln!("info: {}", message);
                 }
-                ResponseInsertToDatabase::Fail { _success, error } => {
+                ResponseInsertToDatabase::Fail(InsertToDatabaseFail { error, _success }) => {
                     return Err(Error {
                         kind: ErrorKind::CNVResponseError,
-                        value: format!("insert_to_dtabase.php failed: {}", error),
+                        value: format!("insert_to_database.php failed: {}", error),
                     });
                 }
             }
