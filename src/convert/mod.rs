@@ -9,6 +9,14 @@ use crate::bitrate::BitRate;
 use crate::error::{Error, ErrorKind};
 use crate::youtube_url::YouTubeURL;
 
+mod schema;
+use schema::{
+    CheckDatabaseFail, CheckDatabaseSuccess, DownloadVideoFail, DownloadVideoSuccess,
+    GetVideoDataFail, GetVideoDataSuccess, InsertToDatabaseFail, InsertToDatabaseSuccess,
+    PayloadCheckDatabase, PayloadDownloadVideo, PayloadGetVideoData, PayloadInsertToDatabase,
+    ResponseCheckDatabase, ResponseDownloadVideo, ResponseGetVideoData, ResponseInsertToDatabase,
+};
+
 /// Enumerated list of supported formats to download youtube videos as
 /// * MP3 for audio
 /// * MP4 for video
@@ -17,162 +25,6 @@ use crate::youtube_url::YouTubeURL;
 enum DLFormat {
     MP4 = 0,
     MP3 = 1,
-}
-
-/// Payload to send to `check_database.php` endpoint
-/// Used to retrieve video metadata as described by `CheckDatabaseVideoData`
-#[derive(Debug, Serialize)]
-struct PayloadCheckDatabase {
-    #[serde(rename = "formatValue")]
-    format_value: usize,
-    quality: BitRate,
-    youtube_id: String,
-}
-
-/// Metadata of a YouTube video as defined by cnvmp3
-#[derive(Debug, Deserialize)]
-struct VideoData {
-    #[serde(rename = "id")]
-    _id: i64,
-    #[serde(rename = "quality")]
-    _quality: String, // NOTE: this is a String in the response, but number in the payload
-    server_path: String,
-    #[serde(rename = "title")]
-    _title: String,
-    #[serde(rename = "youtube_id")]
-    _youtube_id: String,
-}
-
-/// Response schema of successfully fulfilled request to `/check_database.php`
-#[derive(Debug, Deserialize)]
-struct CheckDatabaseSuccess {
-    #[serde(rename = "success")]
-    _success: bool,
-    data: VideoData,
-}
-
-/// Response schema of a failed request to `/check_database.php`
-#[derive(Debug, Deserialize)]
-struct CheckDatabaseFail {
-    #[serde(rename = "success")]
-    _success: bool,
-    error: String,
-}
-
-/// When a video is found in the cnvmp3 database (Exist)
-///
-/// When a video is not found in the cnvmp3 database
-/// `error` will describe what happened on cnvmp3's side
-/// (NoExist)
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ResponseCheckDatabase {
-    Exist(CheckDatabaseSuccess),
-    NoExist(CheckDatabaseFail),
-}
-
-/// Payload to send to `get_video_data.php` endpoint
-/// Used to retrieve the title of the YouTube video
-#[derive(Debug, Serialize)]
-struct PayloadGetVideoData {
-    url: Url,
-}
-
-/// Response schema upon successfully fulfilled request to `/get_video_data.php`
-#[derive(Debug, Deserialize)]
-struct GetVideoDataSuccess {
-    #[serde(rename = "success")]
-    _success: bool,
-    title: String,
-}
-
-/// Response schema upon failed request to `/get_video_data.php`
-#[derive(Debug, Deserialize)]
-struct GetVideoDataFail {
-    #[serde(rename = "success")]
-    _success: bool,
-    error: String,
-}
-
-/// Possibilities of responses to requests made to `/get_video_data.php`
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ResponseGetVideoData {
-    Success(GetVideoDataSuccess),
-    Fail(GetVideoDataFail),
-}
-
-/// Payload to send to `download_video.php` endpoint
-/// Used to retrieve the remote location in cnvmp3's cdn where the MP3 file
-/// is hosted
-#[derive(Debug, Serialize)]
-struct PayloadDownloadVideo {
-    #[serde(rename = "formatValue")]
-    format_value: usize,
-    quality: BitRate,
-    title: String,
-    url: Url,
-}
-
-/// Response schema upon successfully fulfilled request to `/download_video.php`
-#[derive(Debug, Deserialize)]
-struct DownloadVideoSuccess {
-    download_link: String,
-    #[serde(rename = "success")]
-    _success: bool,
-}
-
-/// Response schema upon failed request to `/download_video.php`
-#[derive(Debug, Deserialize)]
-struct DownloadVideoFail {
-    error: String,
-    #[serde(rename = "errorType")]
-    error_type: i64,
-    _success: bool,
-}
-
-/// Possibilities of responses to requests made to `/download_video.php`
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ResponseDownloadVideo {
-    Success(DownloadVideoSuccess),
-    Fail(DownloadVideoFail),
-}
-
-/// Payload to send to `insert_to_database.php` endpoint
-/// Used as an entry into the cnvmp3 database
-#[derive(Debug, Serialize)]
-struct PayloadInsertToDatabase {
-    #[serde(rename = "formatValue")]
-    format_value: usize,
-    quality: BitRate,
-    server_path: String,
-    title: String,
-    youtube_id: String,
-}
-
-/// Response schema upon successfully fulfilled request to `/insert_to_database.php`
-#[derive(Debug, Deserialize)]
-struct InsertToDatabaseSuccess {
-    #[serde(rename = "success")]
-    _success: bool,
-    message: String,
-}
-
-/// Response schema upon failed request to `/insert_to_database.php`
-#[derive(Debug, Deserialize)]
-struct InsertToDatabaseFail {
-    #[serde(rename = "success")]
-    _success: bool,
-    error: String,
-}
-
-/// Possibilities of responses to requests made to `/insert_to_database.php`
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ResponseInsertToDatabase {
-    Success(InsertToDatabaseSuccess),
-    Fail(InsertToDatabaseFail),
 }
 
 /// Custom wrapper for `reqwest::Client`
